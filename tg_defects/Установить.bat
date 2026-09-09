@@ -1,52 +1,60 @@
 @echo off
-chcp 65001 >nul
+setlocal
+cd /d "%~dp0"
+
 echo ============================================
-echo   ╨г╤Б╤В╨░╨╜╨╛╨▓╨║╨░ ╨▓╤Б╨╡╨│╨╛, ╤З╤В╨╛ ╨╜╤Г╨╢╨╜╨╛ ╤Б╨║╤А╨╕╨┐╤В╤Г
+echo   Установка всего, что нужно скрипту
 echo ============================================
 echo.
 
 python --version >nul 2>&1
-if errorlevel 1 (
-  echo [!] Python ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜.
-  echo     ╨б╨║╨░╤З╨░╨╣ ╤Б https://www.python.org/downloads/
-  echo     ╨Я╨а╨Ш ╨г╨б╨в╨Р╨Э╨Ю╨Т╨Ъ╨Х ╨Ю╨С╨п╨Ч╨Р╨в╨Х╨Ы╨м╨Э╨Ю ╨Я╨Ю╨б╨в╨Р╨Т╨м ╨У╨Р╨Ы╨Ю╨з╨Ъ╨г "Add Python to PATH"
-  echo     ╨Я╨╛╤В╨╛╨╝ ╨╖╨░╨┐╤Г╤Б╤В╨╕ ╤Н╤В╨╛╤В ╤Д╨░╨╣╨╗ ╤Б╨╜╨╛╨▓╨░.
-  pause
-  exit /b 1
-)
-echo [╨╛╨║] Python ╨╜╨░╨╣╨┤╨╡╨╜.
+if errorlevel 1 goto nopython
+echo [ок] Python найден.
 
 echo.
-echo [1/2] ╨б╤В╨░╨▓╨╗╤О ╨▒╨╕╨▒╨╗╨╕╨╛╤В╨╡╨║╨╕...
+echo [1/2] Ставлю библиотеки, это займёт несколько минут...
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-if errorlevel 1 (
-  echo [!] ╨Э╨╡ ╤Г╨┤╨░╨╗╨╛╤Б╤М ╨┐╨╛╤Б╤В╨░╨▓╨╕╤В╤М ╨▒╨╕╨▒╨╗╨╕╨╛╤В╨╡╨║╨╕. ╨Я╨╛╨║╨░╨╢╨╕ ╨╝╨╜╨╡ ╤В╨╡╨║╤Б╤В ╨╛╤И╨╕╨▒╨║╨╕ ╨▓╤Л╤И╨╡.
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto pipfail
 
 echo.
-echo [2/2] ╨Я╤А╨╛╨▓╨╡╤А╤П╤О ffmpeg...
+echo [2/2] Проверяю ffmpeg...
 ffmpeg -version >nul 2>&1
-if errorlevel 1 (
-  echo     ffmpeg ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜, ╤Б╤В╨░╨▓╨╗╤О ╤З╨╡╤А╨╡╨╖ winget...
-  winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
-  echo.
-  echo [!] ╨Т╨Р╨Ц╨Э╨Ю: ╨╖╨░╨║╤А╨╛╨╣ ╤Н╤В╨╛ ╨╛╨║╨╜╨╛ ╨╕ ╨╛╤В╨║╤А╨╛╨╣ ╨╖╨░╨╜╨╛╨▓╨╛, ╤З╤В╨╛╨▒╤Л ffmpeg ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗.
-) else (
-  echo [╨╛╨║] ffmpeg ╨╜╨░ ╨╝╨╡╤Б╤В╨╡.
-)
+if errorlevel 1 goto noffmpeg
+echo [ок] ffmpeg на месте.
+goto checkparser
 
+:noffmpeg
+echo     ffmpeg не найден, ставлю через winget...
+winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
 echo.
-echo ╨Я╤А╨╛╨▓╨╡╤А╨║╨░ ╤А╨░╤Б╨┐╨╛╨╖╨╜╨░╨▓╨░╨╜╨╕╤П ╨╜╨╛╨╝╨╡╤А╨╛╨▓ ╨║╨▓╨░╤А╤В╨╕╤А:
+echo [!] ВАЖНО: закрой это окно и открой заново, иначе ffmpeg не подхватится.
+
+:checkparser
+echo.
+echo Проверка распознавания номеров квартир:
 python test_ru_numbers.py
 
 echo.
 echo ============================================
-echo   ╨У╨╛╤В╨╛╨▓╨╛. ╨Ф╨░╨╗╤М╤И╨╡:
-echo   1) ╨╛╤В╨║╤А╨╛╨╣ my.telegram.org, ╨▓╨╛╨╖╤М╨╝╨╕ api_id ╨╕ api_hash
-echo   2) ╨▓╨┐╨╕╤И╨╕ ╨╕╤Е ╨▓ ╤Д╨░╨╣╨╗ "╨Ч╨░╨┐╤Г╤Б╤В╨╕╤В╤М.bat"
-echo   3) ╨╖╨░╨┐╤Г╤Б╤В╨╕ "╨Я╤А╨╛╨▒╨░.bat" - ╨┐╤А╨╛╨▓╨╡╤А╨║╨░ ╨╜╨░ 10 ╨▓╨╕╨┤╨╡╨╛
+echo   Готово. Что дальше:
+echo   1) открой my.telegram.org, возьми api_id и api_hash
+echo   2) впиши их в файл "Проба.bat"
+echo   3) запусти "Проба.bat" - проверка на 10 видео
 echo ============================================
 pause
+exit /b 0
+
+:nopython
+echo [!] Python не найден.
+echo     Скачай его с https://www.python.org/downloads/
+echo     ПРИ УСТАНОВКЕ ПОСТАВЬ ГАЛОЧКУ "Add Python to PATH"
+echo     Потом запусти этот файл снова.
+pause
+exit /b 1
+
+:pipfail
+echo.
+echo [!] Не удалось поставить библиотеки. Покажи текст ошибки выше.
+pause
+exit /b 1

@@ -28,6 +28,15 @@ from datetime import datetime
 
 from ru_numbers import find_apartment
 
+# На Windows консоль бывает в разных кодировках. Пусть непечатаемый символ
+# заменится вопросиком, но скрипт не упадёт посреди скачивания.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
+
 try:
     from telethon.sync import TelegramClient
     from telethon.tl.types import (

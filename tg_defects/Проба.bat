@@ -1,21 +1,27 @@
 @echo off
-chcp 65001 >nul
-rem ╨Т╨┐╨╕╤И╨╕ ╤Б╤О╨┤╨░ ╤Б╨▓╨╛╨╕ api_id ╨╕ api_hash ╤Б https://my.telegram.org
+setlocal
+cd /d "%~dp0"
+
+rem ==== Впиши сюда свои api_id и api_hash с https://my.telegram.org ====
 set TG_API_ID=
 set TG_API_HASH=
+rem ====================================================================
 
-if "%TG_API_ID%"=="" (
-  echo ╨б╨╜╨░╤З╨░╨╗╨░ ╨▓╨┐╨╕╤И╨╕ TG_API_ID ╨╕ TG_API_HASH ╨▓ ╤Н╤В╨╛╤В ╤Д╨░╨╣╨╗.
-  echo ╨Т╨╖╤П╤В╤М ╨╕╤Е: https://my.telegram.org - API development tools
-  pause
-  exit /b 1
-)
+if "%TG_API_ID%"=="" goto nokeys
 
-echo ╨Я╤А╨╛╨▒╨╜╤Л╨╣ ╨┐╤А╨╛╨│╨╛╨╜ ╨╜╨░ 10 ╨┐╨╛╤Б╨╗╨╡╨┤╨╜╨╕╤Е ╨▓╨╕╨┤╨╡╨╛.
-echo ╨б╨║╨░╤З╨░╨╡╤В╤Б╤П ╨▓ D:\╨б╤В╨╡╨║╨╗╨░ - ╨┐╨╛╤Б╨╝╨╛╤В╤А╨╕╤И╤М, ╨▓╨╡╤А╨╜╨╛ ╨╗╨╕ ╨╛╨┐╤А╨╡╨┤╨╡╨╗╨╕╨╗╨╕╤Б╤М ╨║╨▓╨░╤А╤В╨╕╤А╤Л.
+echo Пробный прогон: 10 последних видео из группы.
+echo Скачается в D:\Стекла - посмотришь, верно ли определились квартиры.
 echo.
-python download_defects.py --chat "╨Т╨╕╨┤╨╡╨╛ ╨┤╨╡╤Д╨╡╨║╤В╨╛╨▓" --out "D:\╨б╤В╨╡╨║╨╗╨░" --limit 10
+python download_defects.py --limit 10
 echo.
-echo ╨Ю╤В╨║╤А╨╛╨╣ D:\╨б╤В╨╡╨║╨╗╨░ ╨╕ ╤Д╨░╨╣╨╗ _╨╛╤В╤З╨╡╤В.csv - ╨┐╤А╨╛╨▓╨╡╤А╤М ╨╜╨╛╨╝╨╡╤А╨░.
-echo ╨Х╤Б╨╗╨╕ ╨▓╤Б╤С ╨▓╨╡╤А╨╜╨╛ - ╨╖╨░╨┐╤Г╤Б╨║╨░╨╣ "╨Ч╨░╨┐╤Г╤Б╤В╨╕╤В╤М.bat" ╨╜╨░ ╨▓╨╡╤Б╤М ╨░╤А╤Е╨╕╨▓.
+echo Открой D:\Стекла и файл _отчет.csv - проверь номера квартир.
+echo Если всё верно - запускай "Запустить.bat" на весь архив.
 pause
+exit /b 0
+
+:nokeys
+echo Сначала впиши TG_API_ID и TG_API_HASH в этот файл.
+echo Правой кнопкой по файлу - Изменить.
+echo Взять их тут: https://my.telegram.org - API development tools
+pause
+exit /b 1
