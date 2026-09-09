@@ -69,10 +69,16 @@ def read_export_json(export_dir):
         return {}
 
     info = {}
+    skipped_files = 0
     messages = data.get("messages", [])
     for index, message in enumerate(messages):
         relative = message.get("file")
         if not relative:
+            continue
+        # Если при выгрузке не отметили "Видеофайлы", Телеграм вместо пути
+        # пишет "(File not included...)" — это не файл.
+        if relative.startswith("("):
+            skipped_files += 1
             continue
         caption = flatten_text(message.get("text"))
         # Подпись часто в соседнем сообщении без файла
@@ -94,6 +100,10 @@ def read_export_json(export_dir):
             "id": message.get("id"),
         }
     log("Прочитал result.json: подписи есть для %d файлов." % len(info))
+    if skipped_files:
+        log("! В выгрузке %d сообщений без самих файлов — похоже, при экспорте"
+            % skipped_files)
+        log("  не была отмечена галочка «Видеофайлы» или не хватило лимита размера.")
     return info
 
 

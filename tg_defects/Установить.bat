@@ -12,13 +12,31 @@ if errorlevel 1 goto nopython
 echo [ок] Python найден.
 
 echo.
-echo [1/2] Ставлю библиотеки, это займёт несколько минут...
+echo [1/3] Обновляю pip...
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-if errorlevel 1 goto pipfail
 
 echo.
-echo [2/2] Проверяю ffmpeg...
+echo [2/3] Ставлю распознавание речи, это займёт несколько минут...
+python -m pip install faster-whisper
+if errorlevel 1 goto pipfail
+echo [ок] Распознавание речи готово.
+
+echo.
+echo [3/3] Ставлю telethon (нужен только для скачивания напрямую)...
+python -m pip install telethon
+if errorlevel 1 goto telethonfail
+echo [ок] telethon готов.
+goto ffmpeg
+
+:telethonfail
+echo.
+echo [!] telethon не встал. Это не страшно:
+echo     путь через выгрузку ("Разложить выгрузку.bat") работает без него.
+echo     Не заработает только прямое скачивание ("Проба.bat", "Запустить.bat").
+
+:ffmpeg
+echo.
+echo Проверяю ffmpeg...
 ffmpeg -version >nul 2>&1
 if errorlevel 1 goto noffmpeg
 echo [ок] ffmpeg на месте.
@@ -37,9 +55,13 @@ python test_ru_numbers.py
 
 echo.
 echo ============================================
-echo   Готово. Дальше просто запусти "Проба.bat"
-echo   Скрипт сам спросит api_id и api_hash
-echo   и подскажет, где их взять.
+echo   Готово. Дальше два пути:
+echo.
+echo   Через выгрузку из Телеграма (без api_id):
+echo      запусти "Разложить выгрузку.bat"
+echo.
+echo   Прямое скачивание (нужен api_id):
+echo      запусти "Проба.bat"
 echo ============================================
 pause
 exit /b 0
