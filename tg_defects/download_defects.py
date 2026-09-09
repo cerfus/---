@@ -16,6 +16,7 @@
 """
 
 import argparse
+import configparser
 import csv
 import json
 import os
@@ -52,6 +53,8 @@ STATE_FILE = "_состояние.json"
 REPORT_FILE = "_отчет.csv"
 TEMP_DIR = "_временно"
 SESSION_NAME = "tg_defects_session"
+CONFIG_FILE = "config.ini"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # --------------------------------------------------------------------------
@@ -329,6 +332,94 @@ def neighbours_by_group(messages):
 
 
 # --------------------------------------------------------------------------
+# api_id и api_hash: спрашиваем один раз и запоминаем рядом со скриптом
+# --------------------------------------------------------------------------
+
+WHERE_TO_GET = """
+Нужны api_id и api_hash — это пропуск к Телеграму. Берутся один раз:
+
+  1. Открой в браузере   https://my.telegram.org
+  2. Введи свой номер телефона (в виде +7...).
+  3. Код придёт НЕ в СМС, а сообщением в самом Телеграме — от «Telegram».
+  4. Войдя, нажми  API development tools.
+  5. Заполни форму: App title и Short name — любые, например  steklo.
+     Platform выбери Desktop, описание можно не заполнять.
+  6. Нажми Create application.
+  7. На странице появятся:
+        App api_id     — число, примерно 7-8 цифр
+        App api_hash   — длинная строка из букв и цифр
+
+Скопируй их сюда. Больше спрашивать не буду — сохраню в файл config.ini
+рядом со скриптом. Никому этот файл не пересылай.
+"""
+
+
+def config_path():
+    return os.path.join(SCRIPT_DIR, CONFIG_FILE)
+
+
+def read_config():
+    path = config_path()
+    if not os.path.exists(path):
+        return None, None
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path, encoding="utf-8")
+    except configparser.Error:
+        return None, None
+    if not parser.has_section("telegram"):
+        return None, None
+    section = parser["telegram"]
+    return section.get("api_id", "").strip(), section.get("api_hash", "").strip()
+
+
+def write_config(api_id, api_hash):
+    parser = configparser.ConfigParser()
+    parser["telegram"] = {"api_id": str(api_id), "api_hash": api_hash}
+    with open(config_path(), "w", encoding="utf-8") as fh:
+        fh.write("# Ключи доступа к Телеграму. Файл личный, никому не пересылай.\n")
+        parser.write(fh)
+
+
+def ask_credentials():
+    """Спрашивает ключи у пользователя и сохраняет их."""
+    log(WHERE_TO_GET)
+    api_id = ""
+    while not api_id:
+        entered = input("api_id (только цифры): ").strip()
+        if entered.isdigit():
+            api_id = entered
+        else:
+            log("  Это должно быть число. Попробуй ещё раз.")
+
+    api_hash = ""
+    while not api_hash:
+        entered = input("api_hash (длинная строка): ").strip()
+        if len(entered) >= 30 and " " not in entered:
+            api_hash = entered
+        else:
+            log("  Похоже, скопировалось не полностью. Попробуй ещё раз.")
+
+    write_config(api_id, api_hash)
+    log("")
+    log("Сохранил в %s — больше вводить не придётся." % config_path())
+    log("")
+    return api_id, api_hash
+
+
+def get_credentials(args):
+    api_id = (args.api_id or "").strip() if args.api_id else ""
+    api_hash = (args.api_hash or "").strip() if args.api_hash else ""
+    if not api_id or not api_hash:
+        saved_id, saved_hash = read_config()
+        api_id = api_id or (saved_id or "")
+        api_hash = api_hash or (saved_hash or "")
+    if not api_id or not api_hash:
+        api_id, api_hash = ask_credentials()
+    return api_id, api_hash
+
+
+# --------------------------------------------------------------------------
 # Основной сценарий
 # --------------------------------------------------------------------------
 
@@ -341,9 +432,9 @@ def main():
     parser.add_argument("--out", default=default_out,
                         help="куда складывать (по умолчанию %s)" % default_out)
     parser.add_argument("--api-id", default=os.environ.get("TG_API_ID"),
-                        help="api_id с my.telegram.org (или переменная TG_API_ID)")
+                        help="api_id с my.telegram.org (спросит сам, если не указать)")
     parser.add_argument("--api-hash", default=os.environ.get("TG_API_HASH"),
-                        help="api_hash с my.telegram.org (или переменная TG_API_HASH)")
+                        help="api_hash с my.telegram.org (спросит сам, если не указать)")
     parser.add_argument("--limit", type=int, default=None,
                         help="обработать только N последних сообщений (для пробы)")
     parser.add_argument("--whisper-model", default="small",
@@ -360,11 +451,13 @@ def main():
                         help="показать список групп и выйти")
     args = parser.parse_args()
 
-    if not args.api_id or not args.api_hash:
-        sys.exit("Нужны api_id и api_hash с https://my.telegram.org — "
-                 "передай их через --api-id/--api-hash или переменные окружения.")
+    api_id, api_hash = get_credentials(args)
 
-    client = TelegramClient(SESSION_NAME, int(args.api_id), args.api_hash)
+    log("Подключаюсь к Телеграму...")
+    log("(в первый раз спросит номер телефона и код — код придёт "
+        "сообщением в самом Телеграме)")
+    session_path = os.path.join(SCRIPT_DIR, SESSION_NAME)
+    client = TelegramClient(session_path, int(api_id), api_hash)
     client.start()
 
     if args.list_chats:
