@@ -115,13 +115,13 @@ _DIGIT_AFTER = re.compile(
 )
 # "200 квартира", "200-я квартира"
 _DIGIT_BEFORE = re.compile(
-    r"(?<!\d)(\d{1,4})" + _SEP + r"(?:-?\s*[аяыои]?\s*[йя])?" + _SEP + r"(?:кварт[а-я]*|кв)(?![а-я])",
+    r"(?<!\d)(\d{1,4})" + _SEP + r"(?:-?\s*[аяыои]?\s*[йя])?" + _SEP + r"(?:кварт[а-я]*|кв(?![\s.]*м))(?![а-я])",
     re.IGNORECASE,
 )
 # "№200" без слова "квартира" — запасной вариант
 _HASH_ONLY = re.compile(r"№\s*(\d{1,4})(?!\d)")
 
-_WORD_ANCHOR = re.compile(r"(?:кварт[а-я]*|\bкв\b)", re.IGNORECASE)
+_WORD_ANCHOR = re.compile(r"(?:кварт[а-я]*|\bкв\b(?![\s.]*м))", re.IGNORECASE)
 _TOKEN = re.compile(r"[а-яёa-z0-9]+", re.IGNORECASE)
 
 
