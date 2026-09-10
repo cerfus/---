@@ -121,6 +121,13 @@ _DIGIT_BEFORE = re.compile(
 # "№200" без слова "квартира" — запасной вариант
 _HASH_ONLY = re.compile(r"№\s*(\d{1,4})(?!\d)")
 
+# "66кв", "178кв" — номер вплотную к "кв". Такой номер вернее того, что
+# стоит после: в "66кв 1об" единица — это номер окна, а не квартиры.
+_DIGIT_GLUED = re.compile(
+    r"(?<!\d)(\d{1,4})(?:кварт[а-я]*|кв(?![\s.]*м))(?![а-яa-z])",
+    re.IGNORECASE,
+)
+
 _WORD_ANCHOR = re.compile(r"(?:кварт[а-я]*|\bкв\b(?![\s.]*м))", re.IGNORECASE)
 _TOKEN = re.compile(r"[а-яёa-z0-9]+", re.IGNORECASE)
 
@@ -131,7 +138,8 @@ def find_apartment(text):
         return None, None
     low = text.lower().replace("ё", "е")
     # Приводим стемы к тому же виду
-    for pattern, tag in ((_DIGIT_AFTER, "цифры"), (_DIGIT_BEFORE, "цифры")):
+    for pattern, tag in ((_DIGIT_GLUED, "цифры"), (_DIGIT_AFTER, "цифры"),
+                         (_DIGIT_BEFORE, "цифры")):
         for m in pattern.finditer(low):
             number = int(m.group(1))
             if 1 <= number <= 9999:

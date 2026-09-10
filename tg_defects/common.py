@@ -3,6 +3,7 @@
 
 import configparser
 import csv
+import re
 import json
 import os
 import shutil
@@ -150,8 +151,35 @@ def unique_path(folder, filename):
 # --------------------------------------------------------------------------
 
 CHECK_FILE = "_проверка.txt"
+EXPECTED_FILE = "_ожидание.json"
 VIDEO_EXT = (".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm",
              ".3gp", ".wmv", ".mpg", ".mpeg")
+
+
+def save_expected(root, expected):
+    """Запоминает, сколько видео обещано подписями для каждой квартиры."""
+    path = os.path.join(root, EXPECTED_FILE)
+    try:
+        current = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                current = json.load(fh)
+        current.update({str(k): v for k, v in expected.items()})
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(current, fh, ensure_ascii=False, indent=1)
+    except (OSError, ValueError) as exc:
+        log("! Не смог сохранить ожидаемые количества: %s" % exc)
+
+
+def load_expected(root):
+    path = os.path.join(root, EXPECTED_FILE)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return {int(k): int(v) for k, v in json.load(fh).items()}
+    except (OSError, ValueError, TypeError):
+        return {}
 
 
 def count_videos(folder):
@@ -165,10 +193,12 @@ def count_videos(folder):
 def check_counts(root, expected=4):
     """Сверяет, сколько видео легло в каждую квартиру.
 
-    В квартире столько окон, сколько ожидается видео. Расхождение —
-    верный признак, что видео уехало не в ту папку или потерялось.
+    Если подписи назвали дефекты («Об1 стп1,2 Об2 стп1» — три стеклопакета),
+    сверяемся с этим числом: оно точнее любой общей нормы. Для квартир без
+    подписи берём expected — сколько окон обычно снимают.
     """
-    if expected <= 0:
+    promised = load_expected(root)
+    if expected <= 0 and not promised:
         return []
 
     flats = {}
@@ -183,37 +213,48 @@ def check_counts(root, expected=4):
             flats[int(name)] = count_videos(path)
 
     unknown = count_videos(os.path.join(root, UNKNOWN_DIR))
-    exact = sorted(n for n, c in flats.items() if c == expected)
-    fewer = sorted(n for n, c in flats.items() if c < expected)
-    more = sorted(n for n, c in flats.items() if c > expected)
 
-    def список(numbers):
-        return ", ".join("%d (%d)" % (n, flats[n]) for n in numbers)
+    сходится, расходится, без_подписи = [], [], []
+    for flat, actual in sorted(flats.items()):
+        want = promised.get(flat)
+        if want is None:
+            if expected > 0 and actual != expected:
+                без_подписи.append((flat, actual, expected))
+            continue
+        if actual == want:
+            сходится.append(flat)
+        else:
+            расходится.append((flat, actual, want))
 
     lines = []
-    lines.append("Проверка: в каждой квартире ожидается по %d видео" % expected)
+    lines.append("Проверка: сверяю с тем, что обещано в подписях")
     lines.append("-" * 58)
     lines.append("Квартир найдено:        %d" % len(flats))
-    lines.append("  ровно по %d:           %d" % (expected, len(exact)))
-    lines.append("  меньше чем %d:         %d" % (expected, len(fewer)))
-    if fewer:
-        lines.append("      %s" % список(fewer))
-    lines.append("  больше чем %d:         %d" % (expected, len(more)))
-    if more:
-        lines.append("      %s" % список(more))
+    lines.append("  сходится с подписью:  %d" % len(сходится))
+    lines.append("  расходится:           %d" % len(расходится))
+    for flat, actual, want in расходится:
+        lines.append("      кв %-5d лежит %d, а подпись обещала %d"
+                     % (flat, actual, want))
+    if без_подписи:
+        lines.append("  без подписи (сверял с %d):  %d" % (expected, len(без_подписи)))
+        for flat, actual, want in без_подписи:
+            lines.append("      кв %-5d лежит %d" % (flat, actual))
     lines.append("В папке «%s»:  %d" % (UNKNOWN_DIR, unknown))
     lines.append("Всего видео разложено:  %d" % (sum(flats.values()) + unknown))
     lines.append("")
-    if fewer or more or unknown:
+    if расходится or unknown:
         lines.append("Где смотреть в первую очередь:")
-        if more:
-            lines.append("  Папки, где видео больше нормы — туда попало чужое.")
-        if fewer:
-            lines.append("  Папки, где видео меньше нормы — недостающее ищи")
-            lines.append("  в «%s» или в папке с перебором." % UNKNOWN_DIR)
+        мало = [f for f, a, w in расходится if a < w]
+        много = [f for f, a, w in расходится if a > w]
+        if много:
+            lines.append("  Перебор — туда попало чужое: %s"
+                         % ", ".join(str(f) for f in много))
+        if мало:
+            lines.append("  Недобор — ищи в «%s»: %s"
+                         % (UNKNOWN_DIR, ", ".join(str(f) for f in мало)))
         if unknown:
-            lines.append("  «%s» — номер не распознался, разложи руками."
-                         % UNKNOWN_DIR)
+            lines.append("  «%s» — %d видео разложить руками."
+                         % (UNKNOWN_DIR, unknown))
 
     for line in lines:
         log(line)
@@ -224,6 +265,21 @@ def check_counts(root, expected=4):
     except OSError as exc:
         log("! Не смог записать сводку: %s" % exc)
     return lines
+
+
+_DEFECTS = re.compile(r"(?:стп|сп)\s*\.?\s*((?:\d\s*[,/]\s*)*\d)", re.IGNORECASE)
+
+
+def count_defects(text):
+    """Считает стеклопакеты в подписи: "Об1 стп1,2 Об2 стп 1" -> 3.
+
+    Ровно столько видео и снимают для квартиры, так что число говорит,
+    сколько следующих роликов относятся к той же квартире.
+    """
+    if not text:
+        return 1
+    total = sum(len(re.findall(r"\d", m.group(1))) for m in _DEFECTS.finditer(text))
+    return max(total, 1)
 
 
 def neighbour_texts(items):
