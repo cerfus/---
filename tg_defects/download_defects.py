@@ -7,10 +7,11 @@
 
 Номер квартиры ищется по порядку:
   1) подпись к видео в Телеграме;
-  2) текст соседнего сообщения (то, что писали рядом с видео);
-  3) имя файла;
-  4) речь в начале видео (распознавание Whisper);
-  5) текст на кадрах в начале видео (OCR, если включён --ocr).
+  2) имя файла;
+  3) речь в начале видео (распознавание Whisper);
+  4) текст на кадрах в начале видео (OCR, если включён --ocr);
+  5) текст соседнего сообщения — только если он однозначно относится
+     к этому видео и ни к какому другому.
 
 Запуск:  python download_defects.py --chat "Видео дефектов" --out "D:\\Стекла"
 """
@@ -32,6 +33,7 @@ from common import (
     config_path,
     load_state,
     log,
+    neighbour_texts,
     read_setting,
     save_state,
     write_setting,
@@ -87,10 +89,6 @@ def media_size(message):
         return media.document.size or 0
     return 0
 
-
-# --------------------------------------------------------------------------
-# Распознавание речи и текста на кадрах
-# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # Определение номера квартиры
@@ -174,26 +172,36 @@ def list_chats(client):
 
 
 def neighbours_by_group(messages):
-    """Подписи часто пишут отдельным сообщением рядом. Собираем такие тексты."""
-    texts = {}
+    """Подписи часто пишут отдельным сообщением рядом. Собираем такие тексты.
+
+    Альбом (несколько видео одним постом) — особый случай: подпись там одна
+    на всю пачку и относится ко всем видео сразу, так что её берут все.
+    """
     ordered = sorted(messages, key=lambda m: m.id)
-    for index, message in enumerate(ordered):
+
+    # Подпись альбома — в том сообщении пачки, где есть текст.
+    album_caption = {}
+    for message in ordered:
+        grouped = getattr(message, "grouped_id", None)
+        if grouped and (message.message or "").strip():
+            album_caption.setdefault(grouped, message.message.strip())
+
+    items = [{"файл": str(m.id) if is_video(m) else "",
+              "текст": (m.message or "").strip()} for m in ordered]
+    рядом = neighbour_texts(items)
+
+    texts = {}
+    for message in ordered:
         if not is_video(message):
             continue
         parts = []
         grouped = getattr(message, "grouped_id", None)
-        if grouped:
-            for other in ordered:
-                if getattr(other, "grouped_id", None) == grouped and other.message:
-                    parts.append(other.message)
-        for offset in (-1, 1):
-            neighbour = index + offset
-            if 0 <= neighbour < len(ordered):
-                other = ordered[neighbour]
-                if not is_video(other) and other.message:
-                    parts.append(other.message)
-        unique = list(dict.fromkeys(part.strip() for part in parts if part.strip()))
-        texts[message.id] = "\n".join(unique)
+        if grouped and grouped in album_caption:
+            parts.append(album_caption[grouped])
+        near = рядом.get(str(message.id), "")
+        if near:
+            parts.append(near)
+        texts[message.id] = "\n".join(dict.fromkeys(parts))
     return texts
 
 

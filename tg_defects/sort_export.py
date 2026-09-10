@@ -9,7 +9,7 @@
     Telegram Desktop -> открыть группу "Видео дефектов"
     -> три точки справа сверху -> Экспорт истории чата
     -> отметить "Видеофайлы", снять лишнее
-    -> формат: JSON (тогда будут видны подписи к видео)
+    -> формат: JSON (подписи читаются и из HTML-выгрузки)
     -> размер файла поставить побольше -> Экспортировать
 
 Потом натравить этот скрипт на полученную папку:
@@ -18,9 +18,12 @@
 """
 
 import argparse
+import html as html_module
 import json
 import os
+import re
 import shutil
+import urllib.parse
 
 from common import (
     REPORT_FILE,
@@ -32,6 +35,7 @@ from common import (
     has_ffmpeg,
     load_state,
     log,
+    neighbour_texts,
     read_setting,
     save_state,
     write_setting,
@@ -70,42 +74,115 @@ def read_export_json(export_dir):
         log("! Не смог прочитать result.json (%s), обойдусь именами файлов." % exc)
         return {}
 
-    info = {}
     skipped_files = 0
-    messages = data.get("messages", [])
-    for index, message in enumerate(messages):
-        relative = message.get("file")
-        if not relative:
-            continue
+    collected = []
+    for message in data.get("messages", []):
+        relative = message.get("file") or ""
         # Если при выгрузке не отметили "Видеофайлы", Телеграм вместо пути
         # пишет "(File not included...)" — это не файл.
         if relative.startswith("("):
             skipped_files += 1
-            continue
-        caption = flatten_text(message.get("text"))
-        # Подпись часто в соседнем сообщении без файла
-        neighbours = []
-        for offset in (-1, 1):
-            position = index + offset
-            if 0 <= position < len(messages):
-                other = messages[position]
-                if not other.get("file"):
-                    text = flatten_text(other.get("text"))
-                    if text:
-                        neighbours.append(text)
-        key = os.path.normpath(relative).replace("\\", "/").lower()
-        info[key] = {
-            "подпись": caption,
-            "рядом": "\n".join(neighbours),
+            relative = ""
+        key = os.path.normpath(relative).replace("\\", "/").lower() if relative else ""
+        collected.append({
+            "файл": key,
+            "текст": flatten_text(message.get("text")),
             "дата": (message.get("date") or "").replace("T", " ")[:16],
             "автор": message.get("from") or "",
-            "id": message.get("id"),
+        })
+
+    рядом = neighbour_texts(collected)
+    info = {}
+    for item in collected:
+        if not item["файл"]:
+            continue
+        info[item["файл"]] = {
+            "подпись": item["текст"],
+            "рядом": рядом.get(item["файл"], ""),
+            "дата": item["дата"],
+            "автор": item["автор"],
         }
     log("Прочитал result.json: подписи есть для %d файлов." % len(info))
     if skipped_files:
         log("! В выгрузке %d сообщений без самих файлов — похоже, при экспорте"
             % skipped_files)
         log("  не была отмечена галочка «Видеофайлы» или не хватило лимита размера.")
+    return info
+
+
+# --------------------------------------------------------------------------
+# Выгрузка в HTML: подписи лежат в messages*.html рядом со ссылками на видео
+# --------------------------------------------------------------------------
+
+_TAGS = re.compile(r"<[^>]+>")
+_HREF = re.compile(r'href="([^"]+\.(?:mp4|mov|avi|mkv|webm|m4v|3gp))"', re.I)
+_TEXT = re.compile(r'<div class="text">(.*?)</div>', re.S)
+_FROM = re.compile(r'<div class="from_name">(.*?)</div>', re.S)
+_DATE = re.compile(r'<div class="pull_right date details" title="([^"]*)"')
+
+
+def _plain(fragment):
+    """Из куска HTML делает обычный текст."""
+    if not fragment:
+        return ""
+    fragment = re.sub(r"<br\s*/?>", " ", fragment)
+    return html_module.unescape(_TAGS.sub("", fragment)).strip()
+
+
+def _html_files(export_dir):
+    """messages.html, messages2.html, ... по-человечески по порядку."""
+    found = []
+    for name in os.listdir(export_dir):
+        match = re.fullmatch(r"messages(\d*)\.html", name, re.I)
+        if match:
+            found.append((int(match.group(1) or 1), os.path.join(export_dir, name)))
+    return [path for _number, path in sorted(found)]
+
+
+def read_export_html(export_dir):
+    """Читает messages*.html: путь к файлу -> сведения о сообщении."""
+    pages = _html_files(export_dir)
+    if not pages:
+        return {}
+
+    # Сначала собираем сообщения подряд, чтобы потом видеть соседей.
+    collected = []
+    for page in pages:
+        try:
+            with open(page, encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+        except OSError as exc:
+            log("! Не смог прочитать %s: %s" % (os.path.basename(page), exc))
+            continue
+        blocks = content.split('<div class="message ')[1:]
+        for block in blocks:
+            link = _HREF.search(block)
+            relative = ""
+            if link:
+                relative = urllib.parse.unquote(link.group(1))
+                relative = os.path.normpath(relative).replace("\\", "/").lower()
+            author = _FROM.search(block)
+            date = _DATE.search(block)
+            collected.append({
+                "файл": relative,
+                "текст": _plain(_TEXT.search(block).group(1)) if _TEXT.search(block) else "",
+                "автор": _plain(author.group(1)) if author else "",
+                "дата": (date.group(1) if date else "")[:16],
+            })
+
+    рядом = neighbour_texts(collected)
+    info = {}
+    for item in collected:
+        if not item["файл"]:
+            continue
+        info[item["файл"]] = {
+            "подпись": item["текст"],
+            "рядом": рядом.get(item["файл"], ""),
+            "дата": item["дата"],
+            "автор": item["автор"],
+        }
+    log("Прочитал выгрузку HTML (%d файлов): подписи есть для %d видео."
+        % (len(pages), len(info)))
     return info
 
 
@@ -209,6 +286,13 @@ def main():
         state = forget_unknown(root, state)
 
     info = read_export_json(source)
+    if not info:
+        # Выгрузка в HTML — подписи всё равно можно достать.
+        info = read_export_html(source)
+    if not info:
+        log("! Подписей к видео нет: выгрузка сделана без result.json и без")
+        log("  messages.html, либо подписей в чате не было. Номер будет")
+        log("  определяться только по имени файла и по речи в видео.")
     videos = find_videos(source)
     log("Нашёл видео: %d" % len(videos))
     if not videos:

@@ -149,6 +149,35 @@ def unique_path(folder, filename):
 # Что сказано и показано в самом видео
 # --------------------------------------------------------------------------
 
+def neighbour_texts(items):
+    """items — сообщения по порядку: {"файл": путь или "", "текст": строка}.
+
+    Возвращает {файл: текст рядом}. Текст между двумя видео пропускаем:
+    непонятно, к какому он относится, а ошибиться папкой хуже, чем
+    оставить видео в «неопознанно» — там его хотя бы видно.
+    """
+    result = {}
+    for index, item in enumerate(items):
+        # Сосед — это отдельное сообщение с текстом. Видео с подписью
+        # соседом не считается: его подпись принадлежит ему самому.
+        if not item.get("текст") or item.get("файл"):
+            continue
+        before = items[index - 1] if index > 0 else None
+        after = items[index + 1] if index + 1 < len(items) else None
+        before_video = bool(before and before.get("файл"))
+        after_video = bool(after and after.get("файл"))
+        if before_video and after_video:
+            continue                      # двусмысленно — не берём вовсе
+        target = before if before_video else (after if after_video else None)
+        if target is None:
+            continue
+        key = target["файл"]
+        if key in result:
+            continue                      # у видео уже есть текст рядом
+        result[key] = item["текст"]
+    return result
+
+
 class Recognizer:
     """Ленивая обёртка над Whisper: модель грузится только при первой нужде.
 
