@@ -16,7 +16,6 @@
 """
 
 import argparse
-import configparser
 import os
 import re
 import shutil
@@ -30,9 +29,12 @@ from common import (
     forget_unknown,
     default_out,
     has_ffmpeg,
+    config_path,
     load_state,
     log,
+    read_setting,
     save_state,
+    write_setting,
     unique_path,
 )
 from ru_numbers import find_apartment
@@ -49,7 +51,6 @@ except ImportError:
 
 TEMP_DIR = "_временно"
 SESSION_NAME = "tg_defects_session"
-CONFIG_FILE = "config.ini"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -219,33 +220,6 @@ WHERE_TO_GET = """
 """
 
 
-def config_path():
-    return os.path.join(SCRIPT_DIR, CONFIG_FILE)
-
-
-def read_config():
-    path = config_path()
-    if not os.path.exists(path):
-        return None, None
-    parser = configparser.ConfigParser()
-    try:
-        parser.read(path, encoding="utf-8")
-    except configparser.Error:
-        return None, None
-    if not parser.has_section("telegram"):
-        return None, None
-    section = parser["telegram"]
-    return section.get("api_id", "").strip(), section.get("api_hash", "").strip()
-
-
-def write_config(api_id, api_hash):
-    parser = configparser.ConfigParser()
-    parser["telegram"] = {"api_id": str(api_id), "api_hash": api_hash}
-    with open(config_path(), "w", encoding="utf-8") as fh:
-        fh.write("# Ключи доступа к Телеграму. Файл личный, никому не пересылай.\n")
-        parser.write(fh)
-
-
 def ask_credentials():
     """Спрашивает ключи у пользователя и сохраняет их."""
     log(WHERE_TO_GET)
@@ -265,7 +239,8 @@ def ask_credentials():
         else:
             log("  Похоже, скопировалось не полностью. Попробуй ещё раз.")
 
-    write_config(api_id, api_hash)
+    write_setting("telegram", "api_id", api_id)
+    write_setting("telegram", "api_hash", api_hash)
     log("")
     log("Сохранил в %s — больше вводить не придётся." % config_path())
     log("")
@@ -276,9 +251,8 @@ def get_credentials(args):
     api_id = (args.api_id or "").strip() if args.api_id else ""
     api_hash = (args.api_hash or "").strip() if args.api_hash else ""
     if not api_id or not api_hash:
-        saved_id, saved_hash = read_config()
-        api_id = api_id or (saved_id or "")
-        api_hash = api_hash or (saved_hash or "")
+        api_id = api_id or read_setting("telegram", "api_id")
+        api_hash = api_hash or read_setting("telegram", "api_hash")
     if not api_id or not api_hash:
         api_id, api_hash = ask_credentials()
     return api_id, api_hash
@@ -308,6 +282,9 @@ def main():
                         help="сколько секунд начала видео слушать (по умолчанию 40)")
     parser.add_argument("--ocr", action="store_true",
                         help="дополнительно читать текст с кадров (нужен tesseract)")
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"],
+                        help="на чём распознавать речь (по умолчанию auto, "
+                             "при неудаче сам перейдёт на cpu)")
     parser.add_argument("--no-speech", action="store_true",
                         help="не распознавать речь, только подписи и имена файлов")
     parser.add_argument("--redo-unknown", action="store_true",
@@ -349,7 +326,7 @@ def main():
 
     neighbour_texts = neighbours_by_group(all_messages)
     recognizer = Recognizer(args.whisper_model, args.seconds, args.ocr,
-                            enabled=not args.no_speech)
+                            enabled=not args.no_speech, device=args.device)
 
     if not has_ffmpeg() and not args.no_speech:
         log("! ffmpeg не найден — номер будет браться только из подписей и имён файлов.")

@@ -32,7 +32,9 @@ from common import (
     has_ffmpeg,
     load_state,
     log,
+    read_setting,
     save_state,
+    write_setting,
     unique_path,
 )
 from ru_numbers import find_apartment
@@ -157,8 +159,14 @@ def ask_folder():
     log("Проще всего: открой её в проводнике, скопируй путь из адресной")
     log("строки и вставь сюда правой кнопкой мыши.")
     log("")
+    previous = read_setting("export", "last_folder", "")
+    if previous and os.path.isdir(previous):
+        log("В прошлый раз была: %s" % previous)
+        log("Нажми Enter, чтобы взять её же, или вставь другой путь.")
     while True:
         entered = input("Папка: ").strip().strip('"')
+        if not entered and previous and os.path.isdir(previous):
+            return previous
         if entered and os.path.isdir(entered):
             return entered
         log("  Такой папки нет. Проверь путь и попробуй ещё раз.")
@@ -179,6 +187,9 @@ def main():
                         help="сколько секунд начала видео слушать")
     parser.add_argument("--ocr", action="store_true",
                         help="дополнительно читать номер с кадров")
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"],
+                        help="на чём распознавать речь (по умолчанию auto, "
+                             "при неудаче сам перейдёт на cpu)")
     parser.add_argument("--no-speech", action="store_true",
                         help="не распознавать речь, только подписи и имена файлов")
     parser.add_argument("--redo-unknown", action="store_true",
@@ -188,6 +199,7 @@ def main():
     source = args.source or ask_folder()
     if not os.path.isdir(source):
         raise SystemExit("Папка не найдена: %s" % source)
+    write_setting("export", "last_folder", source)
 
     root = args.out
     os.makedirs(root, exist_ok=True)
@@ -204,7 +216,7 @@ def main():
                          "делалась с галочкой «Видеофайлы».")
 
     recognizer = Recognizer(args.whisper_model, args.seconds, args.ocr,
-                            enabled=not args.no_speech)
+                            enabled=not args.no_speech, device=args.device)
     if not has_ffmpeg() and not args.no_speech:
         log("! ffmpeg не найден — номер возьмётся только из подписей и имён файлов.")
 

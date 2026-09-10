@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Общая часть: распознавание, отчёт, состояние. Используют оба скрипта."""
 
+import configparser
 import csv
 import json
 import os
@@ -9,6 +10,12 @@ import subprocess
 import sys
 import tempfile
 
+# Предупреждение про символьные ссылки в кэше моделей пугает, но ни на что
+# не влияет — глушим до импорта faster-whisper.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+CONFIG_FILE = "config.ini"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 UNKNOWN_DIR = "неопознанно"
 STATE_FILE = "_состояние.json"
 REPORT_FILE = "_отчет.csv"
@@ -19,6 +26,43 @@ for _stream in (sys.stdout, sys.stderr):
             _stream.reconfigure(errors="replace")
         except (ValueError, OSError):
             pass
+
+
+def _short(exc):
+    """Сообщения библиотек бывают на десять строк — оставляем первую."""
+    text = str(exc).strip().splitlines()
+    return text[0][:160] if text else exc.__class__.__name__
+
+
+def config_path():
+    return os.path.join(SCRIPT_DIR, CONFIG_FILE)
+
+
+def read_setting(section, key, default=""):
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(config_path(), encoding="utf-8")
+    except (configparser.Error, OSError):
+        return default
+    return parser.get(section, key, fallback=default).strip()
+
+
+def write_setting(section, key, value):
+    """Дописывает одну настройку, сохраняя всё остальное в файле."""
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(config_path(), encoding="utf-8")
+    except (configparser.Error, OSError):
+        pass
+    if not parser.has_section(section):
+        parser.add_section(section)
+    parser.set(section, key, str(value))
+    try:
+        with open(config_path(), "w", encoding="utf-8") as fh:
+            fh.write("# Настройки скрипта. Файл личный, никому не пересылай.\n")
+            parser.write(fh)
+    except OSError as exc:
+        log("! Не смог сохранить настройку: %s" % exc)
 
 
 def log(message):
@@ -106,53 +150,96 @@ def unique_path(folder, filename):
 # --------------------------------------------------------------------------
 
 class Recognizer:
-    """Ленивая обёртка над Whisper: модель грузится только при первой нужде."""
+    """Ленивая обёртка над Whisper: модель грузится только при первой нужде.
+
+    Если видеокарта не годится (нет библиотек CUDA — частый случай),
+    молча переходит на процессор: медленнее, но работает везде.
+    """
 
     def __init__(self, model_size="small", seconds=40, use_ocr=False,
-                 enabled=True):
+                 enabled=True, device="auto"):
         self.model_size = model_size
         self.seconds = seconds
         self.use_ocr = use_ocr
         self._model = None
         self._model_failed = not enabled
+        self.device = device or "auto"
+        if self.device == "auto":
+            # Если в прошлый раз видеокарта уже подвела — не пробуем снова.
+            remembered = read_setting("recognition", "device", "")
+            if remembered in ("cpu", "cuda"):
+                self.device = remembered
+
+    def _switch_to_cpu(self, exc):
+        log("! Видеокарта для распознавания не годится: %s" % _short(exc))
+        log("  Перехожу на процессор. Будет медленнее, но надёжно.")
+        self.device = "cpu"
+        self._model = None
+        write_setting("recognition", "device", "cpu")
 
     def _get_model(self):
-        if self._model is None and not self._model_failed:
-            try:
-                from faster_whisper import WhisperModel
-            except ImportError:
-                log("! faster-whisper не установлен — распознавание речи выключено.")
-                self._model_failed = True
-                return None
-            log("  загружаю модель распознавания речи (%s), первый раз это долго..."
-                % self.model_size)
-            try:
-                self._model = WhisperModel(self.model_size, device="auto",
-                                           compute_type="int8")
-            except Exception as exc:                      # noqa: BLE001
-                log("! Не удалось загрузить модель: %s" % exc)
-                self._model_failed = True
-                return None
+        if self._model is not None or self._model_failed:
+            return self._model
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            log("! faster-whisper не установлен — распознавание речи выключено.")
+            self._model_failed = True
+            return None
+
+        log("  загружаю модель распознавания речи (%s, %s), "
+            "первый раз это долго..." % (self.model_size, self.device))
+        try:
+            self._model = WhisperModel(self.model_size, device=self.device,
+                                       compute_type="int8")
+        except Exception as exc:                          # noqa: BLE001
+            if self.device != "cpu":
+                self._switch_to_cpu(exc)
+                return self._get_model()
+            log("! Не удалось загрузить модель: %s" % exc)
+            self._model_failed = True
+            return None
         return self._model
+
+    def _extract_audio(self, video_path):
+        """Вырезает первые N секунд звука. Возвращает путь к wav или ''."""
+        handle, wav_path = tempfile.mkstemp(suffix=".wav")
+        os.close(handle)
+        cmd = ["ffmpeg", "-y", "-v", "error", "-i", video_path,
+               "-t", str(self.seconds), "-vn", "-ac", "1", "-ar", "16000",
+               wav_path]
+        try:
+            if subprocess.call(cmd) == 0 and os.path.getsize(wav_path) > 1024:
+                return wav_path
+        except OSError as exc:
+            log("! Не смог достать звук из видео: %s" % exc)
+        os.remove(wav_path)
+        return ""
 
     def transcribe(self, video_path):
         """Расшифровывает первые N секунд видео. Возвращает текст или ''."""
-        model = self._get_model()
-        if model is None or not has_ffmpeg():
+        if self._model_failed or not has_ffmpeg():
             return ""
-        handle, wav_path = tempfile.mkstemp(suffix=".wav")
-        os.close(handle)
+        wav_path = self._extract_audio(video_path)
+        if not wav_path:
+            return ""
         try:
-            cmd = ["ffmpeg", "-y", "-v", "error", "-i", video_path,
-                   "-t", str(self.seconds), "-vn", "-ac", "1", "-ar", "16000",
-                   wav_path]
-            if subprocess.call(cmd) != 0:
-                return ""
-            segments, _ = model.transcribe(wav_path, language="ru", beam_size=5,
-                                           vad_filter=True)
-            return " ".join(seg.text for seg in segments).strip()
-        except Exception as exc:                          # noqa: BLE001
-            log("! Ошибка распознавания речи: %s" % exc)
+            # Первая попытка может упереться в видеокарту — тогда повторяем
+            # на процессоре, уже без потери этого файла.
+            for attempt in (1, 2):
+                model = self._get_model()
+                if model is None:
+                    return ""
+                try:
+                    segments, _ = model.transcribe(wav_path, language="ru",
+                                                   beam_size=5, vad_filter=True)
+                    return " ".join(seg.text for seg in segments).strip()
+                except Exception as exc:                  # noqa: BLE001
+                    if attempt == 1 and self.device != "cpu":
+                        self._switch_to_cpu(exc)
+                        continue
+                    log("! Ошибка распознавания речи: %s" % exc)
+                    return ""
             return ""
         finally:
             if os.path.exists(wav_path):
