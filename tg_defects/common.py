@@ -149,6 +149,83 @@ def unique_path(folder, filename):
 # Что сказано и показано в самом видео
 # --------------------------------------------------------------------------
 
+CHECK_FILE = "_проверка.txt"
+VIDEO_EXT = (".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm",
+             ".3gp", ".wmv", ".mpg", ".mpeg")
+
+
+def count_videos(folder):
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return 0
+    return sum(1 for name in names if name.lower().endswith(VIDEO_EXT))
+
+
+def check_counts(root, expected=4):
+    """Сверяет, сколько видео легло в каждую квартиру.
+
+    В квартире столько окон, сколько ожидается видео. Расхождение —
+    верный признак, что видео уехало не в ту папку или потерялось.
+    """
+    if expected <= 0:
+        return []
+
+    flats = {}
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError as exc:
+        log("! Не смог заглянуть в %s: %s" % (root, exc))
+        return []
+    for name in entries:
+        path = os.path.join(root, name)
+        if os.path.isdir(path) and name.isdigit():
+            flats[int(name)] = count_videos(path)
+
+    unknown = count_videos(os.path.join(root, UNKNOWN_DIR))
+    exact = sorted(n for n, c in flats.items() if c == expected)
+    fewer = sorted(n for n, c in flats.items() if c < expected)
+    more = sorted(n for n, c in flats.items() if c > expected)
+
+    def список(numbers):
+        return ", ".join("%d (%d)" % (n, flats[n]) for n in numbers)
+
+    lines = []
+    lines.append("Проверка: в каждой квартире ожидается по %d видео" % expected)
+    lines.append("-" * 58)
+    lines.append("Квартир найдено:        %d" % len(flats))
+    lines.append("  ровно по %d:           %d" % (expected, len(exact)))
+    lines.append("  меньше чем %d:         %d" % (expected, len(fewer)))
+    if fewer:
+        lines.append("      %s" % список(fewer))
+    lines.append("  больше чем %d:         %d" % (expected, len(more)))
+    if more:
+        lines.append("      %s" % список(more))
+    lines.append("В папке «%s»:  %d" % (UNKNOWN_DIR, unknown))
+    lines.append("Всего видео разложено:  %d" % (sum(flats.values()) + unknown))
+    lines.append("")
+    if fewer or more or unknown:
+        lines.append("Где смотреть в первую очередь:")
+        if more:
+            lines.append("  Папки, где видео больше нормы — туда попало чужое.")
+        if fewer:
+            lines.append("  Папки, где видео меньше нормы — недостающее ищи")
+            lines.append("  в «%s» или в папке с перебором." % UNKNOWN_DIR)
+        if unknown:
+            lines.append("  «%s» — номер не распознался, разложи руками."
+                         % UNKNOWN_DIR)
+
+    for line in lines:
+        log(line)
+    try:
+        with open(os.path.join(root, CHECK_FILE), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        log("Эта же сводка лежит в %s" % os.path.join(root, CHECK_FILE))
+    except OSError as exc:
+        log("! Не смог записать сводку: %s" % exc)
+    return lines
+
+
 def neighbour_texts(items):
     """items — сообщения по порядку: {"файл": путь или "", "текст": строка}.
 

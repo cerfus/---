@@ -30,6 +30,7 @@ from common import (
     UNKNOWN_DIR,
     Recognizer,
     append_report,
+    check_counts,
     forget_unknown,
     default_out,
     has_ffmpeg,
@@ -269,6 +270,9 @@ def main():
                              "при неудаче сам перейдёт на cpu)")
     parser.add_argument("--no-speech", action="store_true",
                         help="не распознавать речь, только подписи и имена файлов")
+    parser.add_argument("--per-flat", type=int, default=4,
+                        help="сколько видео ожидается в квартире (по числу окон, "
+                             "по умолчанию 4; 0 — не проверять)")
     parser.add_argument("--redo-unknown", action="store_true",
                         help="заново обработать то, что попало в 'неопознанно'")
     args = parser.parse_args()
@@ -367,6 +371,9 @@ def main():
     if counters["неопознано"]:
         log("Видео из папки '%s' разложи руками — в отчёте видно, "
             "что в них было слышно." % UNKNOWN_DIR)
+
+    log("")
+    check_counts(root, args.per_flat)
 
 
 if __name__ == "__main__":
