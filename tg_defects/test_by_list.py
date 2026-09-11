@@ -1,0 +1,76 @@
+# -*- coding: utf-8 -*-
+"""Проверка раскладки по заполненному вручную списку.
+
+Запуск: python test_by_list.py
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ЗДЕСЬ = os.path.dirname(os.path.abspath(__file__))
+СПИСОК = "_список.csv"
+
+# Номер стоит только у первой строки квартиры — как и заполняет человек.
+НОМЕРА = {1: "60", 4: "кв 65", 6: "178"}
+ЖДЁМ = {"video_0001.mp4": "60", "video_0002.mp4": "60", "video_0003.mp4": "60",
+        "video_0004.mp4": "65", "video_0005.mp4": "65",
+        "video_0006.mp4": "178", "video_0007.mp4": "178"}
+
+
+def запустить(*args):
+    return subprocess.run([sys.executable, os.path.join(ЗДЕСЬ, "by_list.py")]
+                          + list(args), capture_output=True, text=True, cwd=ЗДЕСЬ)
+
+
+def main():
+    источник = tempfile.mkdtemp()
+    приёмник = tempfile.mkdtemp()
+    try:
+        # Видео сняты подряд, группами
+        for i, сдвиг in enumerate([0, 60, 120, 600, 660, 1200, 1260], 1):
+            путь = os.path.join(источник, "video_%04d.mp4" % i)
+            with open(путь, "wb") as fh:
+                fh.write(b"\0" * 512)
+            когда = 1780000000 + сдвиг
+            os.utime(путь, (когда, когда))
+
+        запустить("--from", источник)
+        путь_списка = os.path.join(источник, СПИСОК)
+        if not os.path.exists(путь_списка):
+            print("ПЛОХО список не создан")
+            return 1
+
+        строки = open(путь_списка, encoding="utf-8-sig").read().splitlines()
+        новые = [строки[0]]
+        for i, строка in enumerate(строки[1:], 1):
+            новые.append(строка + НОМЕРА.get(i, ""))
+        with open(путь_списка, "w", encoding="utf-8-sig") as fh:
+            fh.write("\n".join(новые) + "\n")
+
+        запустить("--from", источник, "--out", приёмник, "--sort")
+
+        разложено = {}
+        for папка in os.listdir(приёмник):
+            путь = os.path.join(приёмник, папка)
+            if os.path.isdir(путь):
+                for имя in os.listdir(путь):
+                    разложено[имя.split("_", 1)[1]] = папка
+
+        failed = 0
+        for файл, папка in sorted(ЖДЁМ.items()):
+            получено = разложено.get(файл)
+            if получено != папка:
+                failed += 1
+                print("ПЛОХО %-18s ждём кв %s, получили %s" % (файл, папка, получено))
+        print("Проверок: %d, провалов: %d" % (len(ЖДЁМ), failed))
+        return 1 if failed else 0
+    finally:
+        shutil.rmtree(источник, ignore_errors=True)
+        shutil.rmtree(приёмник, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
