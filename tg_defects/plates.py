@@ -20,12 +20,69 @@ import tempfile
 
 from common import has_ffmpeg, log
 
+# Куда winget и установщик UB Mannheim обычно кладут Tesseract.
+# В PATH он при этом попадает не всегда, поэтому ищем сами.
+WINDOWS_PATHS = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                 "Programs", "Tesseract-OCR", "tesseract.exe"),
+    os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                 "Tesseract-OCR", "tesseract.exe"),
+)
+WINGET_GLOB = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft",
+                           "WinGet", "Packages", "UB-Mannheim.TesseractOCR*",
+                           "tesseract.exe")
+
 MIN_FLAT, MAX_FLAT = 1, 9999
 DEFAULT_CONFIDENCE = 75      # проверено на тестовых видео: ошибок нет
 ENOUGH_CONFIDENCE = 92       # настолько уверенное чтение уточнять незачем
 CONFIGS = ("--psm 8", "--psm 13")     # табличка — это одно слово или строка
 TRIMS = (0, 15, 30)                   # рамку таблички иногда надо срезать
 _DIGITS = re.compile(r"\d{1,4}")
+
+
+_язык = None
+
+
+def find_tesseract():
+    """Прописывает путь к tesseract.exe, если его нет в PATH."""
+    import glob
+    import pytesseract
+    if shutil.which("tesseract"):
+        return True
+    кандидаты = [путь for путь in WINDOWS_PATHS if путь and os.path.isfile(путь)]
+    кандидаты += sorted(glob.glob(WINGET_GLOB))
+    if кандидаты:
+        pytesseract.pytesseract.tesseract_cmd = кандидаты[0]
+        return True
+    return False
+
+
+def pick_language():
+    """Русский словарь бывает не установлен — тогда читаем только цифры.
+
+    Для таблички это почти не потеря: цифры в обоих словарях одинаковы,
+    русский помогает лишь распознать слово «кв» рядом с числом.
+    """
+    global _язык
+    if _язык:
+        return _язык
+    import pytesseract
+    from PIL import Image
+    проба = Image.new("L", (60, 30), 255)
+    for язык in ("rus+eng", "eng"):
+        try:
+            pytesseract.image_to_string(проба, lang=язык)
+            _язык = язык
+            if язык == "eng":
+                log("! Русский словарь Tesseract не найден — читаю только цифры.")
+                log("  Для табличек с числами этого достаточно.")
+            return _язык
+        except Exception:                                 # noqa: BLE001
+            continue
+    _язык = "eng"
+    return _язык
 
 
 def ocr_available():
@@ -38,13 +95,17 @@ def ocr_available():
         return False, ("не установлены библиотеки. Выполни:\n"
                        "    pip install pytesseract Pillow numpy")
     import pytesseract
+    find_tesseract()
     try:
-        pytesseract.get_tesseract_version()
+        версия = pytesseract.get_tesseract_version()
     except Exception:                                     # noqa: BLE001
         return False, ("не найден сам Tesseract. Поставь его:\n"
                        "    winget install UB-Mannheim.TesseractOCR\n"
                        "  при установке отметь русский язык (Russian),\n"
-                       "  потом закрой это окно и открой заново")
+                       "  потом закрой это окно и открой заново.\n"
+                       "  Если он уже стоит — значит не прописан в PATH;\n"
+                       "  тогда перезапусти командную строку")
+    log("Tesseract найден, версия %s" % версия)
     if not has_ffmpeg():
         return False, "не найден ffmpeg — без него не достать кадры из видео"
     return True, ""
@@ -127,7 +188,7 @@ def _read_confident(картинка, конфиг):
     import pytesseract
     try:
         данные = pytesseract.image_to_data(
-            картинка, lang="rus+eng", config=конфиг,
+            картинка, lang=pick_language(), config=конфиг,
             output_type=pytesseract.Output.DICT)
     except Exception:                                     # noqa: BLE001
         return []
