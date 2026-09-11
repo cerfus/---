@@ -260,9 +260,10 @@ def spread_by_caption(found):
     """
     current, left = None, 0
     for item in found:
-        caption = (item["подпись"] or "").strip()
         if item["квартира"]:
-            promised = count_defects(caption)
+            # Дефекты перечислены в том же тексте, что назвал квартиру:
+            # это может быть и подпись видео, и соседнее сообщение.
+            promised = count_defects(item["текст"])
             if item["квартира"] == current:
                 left += promised          # та же квартира, подпись добавляет дефекты
             else:
@@ -356,6 +357,22 @@ def write_hints(root, found, promised):
         log("! Не смог записать подсказки: %s" % exc)
 
 
+def promised_counts(found):
+    """Сколько видео обещано для каждой квартиры.
+
+    Обещание даёт текст, который сам назвал квартиру: подпись видео или
+    соседнее сообщение — неважно, дефекты перечислены и там, и там.
+    Достроенные видео ничего не обещают, иначе счёт задвоится.
+    """
+    promised = {}
+    for item in found:
+        number = item["квартира"]
+        if not number or item["как"].startswith("достроено"):
+            continue
+        promised[number] = promised.get(number, 0) + count_defects(item["текст"])
+    return promised
+
+
 def fill_backwards(found):
     """Добирает недостающие видео из тех, что идут ПЕРЕД подписью.
 
@@ -364,19 +381,16 @@ def fill_backwards(found):
     сколько подпись ещё недосчиталась, и только подряд идущие ролики вплотную
     перед ней, поэтому лишнего забрать не можем.
     """
-    promised, actual = {}, {}
+    promised = promised_counts(found)
+    actual = {}
     for item in found:
-        number, caption = item["квартира"], (item["подпись"] or "").strip()
-        if number:
-            actual[number] = actual.get(number, 0) + 1
-            if caption and find_apartment(caption)[0] == number:
-                promised[number] = promised.get(number, 0) + count_defects(caption)
+        if item["квартира"]:
+            actual[item["квартира"]] = actual.get(item["квартира"], 0) + 1
 
     added = 0
     for index, item in enumerate(found):
         number = item["квартира"]
-        caption = (item["подпись"] or "").strip()
-        if not number or not caption or find_apartment(caption)[0] != number:
+        if not number or item["как"].startswith("достроено"):
             continue
         short = promised.get(number, 0) - actual.get(number, 0)
         if short <= 0:
@@ -553,12 +567,8 @@ def main():
         log("Видео из папки '%s' разложи руками — в отчёте видно, "
             "что о них известно." % UNKNOWN_DIR)
 
-    # Сколько видео обещали подписи — по этому и будем сверять.
-    promised = {}
-    for item in found:
-        number, caption = item["квартира"], (item["подпись"] or "").strip()
-        if number and caption and find_apartment(caption)[0] == number:
-            promised[number] = promised.get(number, 0) + count_defects(caption)
+    # Сколько видео обещали тексты — по этому и будем сверять.
+    promised = promised_counts(found)
     if promised:
         save_expected(root, promised)
 
