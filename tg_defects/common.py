@@ -156,21 +156,6 @@ VIDEO_EXT = (".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm",
              ".3gp", ".wmv", ".mpg", ".mpeg")
 
 
-def save_expected(root, expected):
-    """Запоминает, сколько видео обещано подписями для каждой квартиры."""
-    path = os.path.join(root, EXPECTED_FILE)
-    try:
-        current = {}
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as fh:
-                current = json.load(fh)
-        current.update({str(k): v for k, v in expected.items()})
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(current, fh, ensure_ascii=False, indent=1)
-    except (OSError, ValueError) as exc:
-        log("! Не смог сохранить ожидаемые количества: %s" % exc)
-
-
 def load_expected(root):
     path = os.path.join(root, EXPECTED_FILE)
     if not os.path.exists(path):
@@ -182,12 +167,73 @@ def load_expected(root):
         return {}
 
 
+def save_expected(root, expected):
+    """Запоминает, сколько видео обещано подписями для каждой квартиры."""
+    path = os.path.join(root, EXPECTED_FILE)
+    # Старый файл может быть пустым или битым — это не повод терять новые
+    # данные, просто перезаписываем его целиком.
+    current = load_expected(root)
+    current.update(expected)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({str(k): v for k, v in current.items()}, fh,
+                      ensure_ascii=False, indent=1)
+        os.replace(tmp, path)
+    except OSError as exc:
+        log("! Не смог сохранить ожидаемые количества: %s" % exc)
+
+
 def count_videos(folder):
     try:
         names = os.listdir(folder)
     except OSError:
         return 0
     return sum(1 for name in names if name.lower().endswith(VIDEO_EXT))
+
+
+def count_placed(root):
+    """Сколько видео уже разложено по папкам-квартирам и в «неопознанно»."""
+    total = 0
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError:
+        return 0
+    for name in entries:
+        path = os.path.join(root, name)
+        if os.path.isdir(path) and (name.isdigit() or name == UNKNOWN_DIR):
+            total += count_videos(path)
+    return total
+
+
+def clean_layout(root):
+    """Сносит прежнюю раскладку: папки квартир и служебные файлы.
+
+    Трогает только то, что раскладывал сам — папки с числовым именем,
+    «неопознанно» и свои служебные файлы. Ничего чужого в папке не заденет.
+    """
+    removed = 0
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError as exc:
+        log("! Не смог заглянуть в %s: %s" % (root, exc))
+        return 0
+    for name in entries:
+        path = os.path.join(root, name)
+        if os.path.isdir(path) and (name.isdigit() or name == UNKNOWN_DIR):
+            try:
+                removed += count_videos(path)
+                shutil.rmtree(path)
+            except OSError as exc:
+                log("! Не смог удалить папку %s: %s" % (name, exc))
+        elif name in (STATE_FILE, REPORT_FILE, CHECK_FILE, EXPECTED_FILE,
+                      "_подсказки.txt"):
+            try:
+                os.remove(path)
+            except OSError as exc:
+                log("! Не смог удалить %s: %s" % (name, exc))
+    log("Убрал прежнюю раскладку: %d видео." % removed)
+    return removed
 
 
 def check_counts(root, expected=4):

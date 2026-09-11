@@ -31,12 +31,15 @@ from common import (
     Recognizer,
     append_report,
     check_counts,
+    clean_layout,
+    count_placed,
     count_defects,
     save_expected,
     forget_unknown,
     default_out,
     has_ffmpeg,
     load_state,
+    STATE_FILE,
     log,
     neighbour_texts,
     read_setting,
@@ -435,6 +438,8 @@ def main():
                              "по умолчанию 4; 0 — не проверять)")
     parser.add_argument("--redo-unknown", action="store_true",
                         help="заново обработать то, что попало в 'неопознанно'")
+    parser.add_argument("--clean", action="store_true",
+                        help="снести прежнюю раскладку и разложить с нуля")
     args = parser.parse_args()
 
     source = args.source or ask_folder()
@@ -446,6 +451,28 @@ def main():
     os.makedirs(root, exist_ok=True)
 
     state = load_state(root)
+
+    if args.clean:
+        clean_layout(root)
+        state = {}
+    else:
+        # Видео в папках есть, а памяти про них нет — значит там остатки
+        # прошлой раскладки. Разложить поверх — значит удвоить их.
+        placed = count_placed(root)
+        if placed and not state:
+            log("")
+            log("СТОП. В %s уже лежит %d видео, но памяти о них нет." % (root, placed))
+            log("Это остатки прошлого прогона: папку удаляли не до конца или")
+            log("потерялся файл %s." % STATE_FILE)
+            log("")
+            log("Если разложить поверх, эти видео задвоятся — как раз так и")
+            log("вышло, когда в папках оказалось больше файлов, чем в выгрузке.")
+            log("")
+            log("Разложить с нуля (старое сотрётся, видео возьмутся из выгрузки):")
+            log("    запусти «Разложить заново с нуля.bat»")
+            log("    или:  python sort_export.py --clean")
+            raise SystemExit(1)
+
     if args.redo_unknown:
         state = forget_unknown(root, state)
 
