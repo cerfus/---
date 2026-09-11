@@ -37,7 +37,7 @@ from common import (
 )
 
 LIST_FILE = "_список.csv"
-COLUMNS = ["№", "файл", "снято", "длина", "квартира"]
+COLUMNS = ["№", "файл", "снято", "длина", "квартира", "как прочитано"]
 
 
 def videos_in(folder):
@@ -128,7 +128,48 @@ def sort_key(записи):
     return lambda з: (з[1], os.path.basename(з[0]))
 
 
-def make_list(source):
+def read_plates(записи, seconds, frames, confidence):
+    """Читает номер с таблички в начале каждого видео."""
+    from plates import ocr_available, read_plate
+
+    можно, беда = ocr_available()
+    if не_можно(можно, беда):
+        return {}
+
+    log("")
+    log("Читаю таблички в начале видео. Это примерно %d минут." %
+        max(1, int(len(записи) * 5 / 60)))
+    log("Число принимается, только если распознано уверенно: лучше оставить")
+    log("пустым, чем разложить видео не в ту квартиру.")
+    log("")
+
+    прочитано = {}
+    for position, (path, _когда, _сколько) in enumerate(записи, 1):
+        номер, почему = read_plate(path, seconds=seconds, frames=frames,
+                                   confidence=confidence)
+        прочитано[path] = (номер, почему)
+        отметка = "кв %d" % номер if номер else "—"
+        log("[%d/%d] %-34s %s" % (position, len(записи),
+                                  os.path.basename(path)[:34], отметка))
+    нашлось = sum(1 for номер, _ in прочитано.values() if номер)
+    log("")
+    log("Номер прочитан у %d видео из %d." % (нашлось, len(записи)))
+    if нашлось < len(записи):
+        log("Остальные оставлены пустыми — впиши номера сам или оставь как")
+        log("есть, тогда они уедут в «%s»." % UNKNOWN_DIR)
+    return прочитано
+
+
+def не_можно(можно, беда):
+    if можно:
+        return False
+    log("")
+    log("! Распознать таблички не получится: %s" % беда)
+    log("  Список соберу без номеров.")
+    return True
+
+
+def make_list(source, ocr=False, seconds=5, frames=3, confidence=75):
     videos = videos_in(source)
     if not videos:
         raise SystemExit("В %s нет видео." % source)
@@ -145,8 +186,20 @@ def make_list(source):
     записи.sort(key=sort_key(записи))
     log("Видео в списке: %d" % len(записи))
 
-    строки = [[position, os.path.basename(path), когда, сколько, ""]
-              for position, (path, когда, сколько) in enumerate(записи, 1)]
+    прочитано = read_plates(записи, seconds, frames, confidence) if ocr else {}
+    строки = []
+    for position, (path, когда, сколько) in enumerate(записи, 1):
+        номер, почему = прочитано.get(path, (None, ""))
+        if номер:
+            клетка = str(номер)
+        elif ocr:
+            # Табличку не прочитали. Пишем явное «нет», чтобы видео ушло в
+            # «неопознанно», а не унаследовало квартиру строкой выше.
+            клетка = "нет"
+        else:
+            клетка = ""
+        строки.append([position, os.path.basename(path), когда, сколько,
+                       клетка, почему])
 
     path = os.path.join(source, LIST_FILE)
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
@@ -160,8 +213,10 @@ def make_list(source):
     log("Что дальше:")
     log("  1. Открой его в Excel. Видео идут в том же порядке, что и в чате,")
     log("     а колонка «длина» поможет узнать нужный ролик.")
-    log("  2. В колонке «квартира» проставь номера. Заполняй только первую")
-    log("     строку каждой квартиры: пустая клетка = та же, что выше.")
+    log("  2. В колонке «квартира»:")
+    log("       число       — эта квартира")
+    log("       пусто       — та же квартира, что строкой выше")
+    log("       нет         — в «%s», ничего не наследовать" % UNKNOWN_DIR)
     log("  3. Сохрани (Excel спросит про формат — оставь CSV) и запусти:")
     log("     python by_list.py --from \"%s\" --sort" % source)
 
@@ -176,20 +231,33 @@ def read_list(source):
     if len(rows) < 2:
         raise SystemExit("Список пуст.")
 
-    назначения, текущая, пустых = [], None, 0
+    назначения, текущая = [], None
+    унаследовано = без_номера = 0
     for строка in rows[1:]:
         if len(строка) < 5 or not строка[1].strip():
             continue
         имя = строка[1].strip()
-        номер = строка[4].strip()
-        if номер:
-            цифры = "".join(c for c in номер if c.isdigit())
+        клетка = строка[4].strip()
+        низ = клетка.lower()
+        if низ in ("нет", "-", "—", "?"):
+            # Явный отказ: это видео в «неопознанно», квартиру сверху не берём
+            назначения.append((имя, None))
+            без_номера += 1
+            continue
+        if клетка:
+            цифры = "".join(c for c in клетка if c.isdigit())
             текущая = int(цифры) if цифры else None
-        elif текущая is None:
-            пустых += 1
+        else:
+            if текущая is not None:
+                унаследовано += 1
+            else:
+                без_номера += 1
         назначения.append((имя, текущая))
-    if пустых:
-        log("Без номера в начале списка: %d — уедут в «%s»." % (пустых, UNKNOWN_DIR))
+
+    if унаследовано:
+        log("Пустых клеток, взявших квартиру строкой выше: %d" % унаследовано)
+    if без_номера:
+        log("Без квартиры: %d — уедут в «%s»." % (без_номера, UNKNOWN_DIR))
     return назначения
 
 
@@ -264,6 +332,15 @@ def main():
                         help="куда раскладывать (по умолчанию %s)" % default_out())
     parser.add_argument("--sort", action="store_true",
                         help="разложить по заполненному списку")
+    parser.add_argument("--ocr", action="store_true",
+                        help="прочитать номер с таблички в начале видео")
+    parser.add_argument("--seconds", type=int, default=5,
+                        help="сколько секунд начала видео смотреть (по умолчанию 5)")
+    parser.add_argument("--frames", type=int, default=3,
+                        help="сколько кадров брать (по умолчанию 3)")
+    parser.add_argument("--confidence", type=int, default=75,
+                        help="насколько уверенным должно быть чтение, 0-100 "
+                             "(по умолчанию 75; ниже — больше ошибок)")
     parser.add_argument("--move", action="store_true",
                         help="переносить файлы, а не копировать")
     args = parser.parse_args()
@@ -277,7 +354,8 @@ def main():
     if args.sort:
         sort_by_list(args.source, args.out, args.move)
     else:
-        make_list(args.source)
+        make_list(source, ocr=args.ocr, seconds=args.seconds,
+                  frames=args.frames, confidence=args.confidence)
 
 
 if __name__ == "__main__":
