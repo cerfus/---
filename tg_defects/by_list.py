@@ -21,6 +21,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -36,7 +37,7 @@ from common import (
 )
 
 LIST_FILE = "_список.csv"
-COLUMNS = ["№", "файл", "снято", "длительность", "квартира"]
+COLUMNS = ["№", "файл", "снято", "длина", "квартира"]
 
 
 def videos_in(folder):
@@ -67,11 +68,64 @@ def shot_info(path):
                     pass
         except (OSError, ValueError, subprocess.TimeoutExpired):
             pass
-    if not когда:
-        import datetime
-        когда = datetime.datetime.fromtimestamp(
-            os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
+    # Время файла на диске — это когда его скачали, а не сняли. В колонку
+    # такое ставить нельзя: будет только сбивать с толку.
     return когда, сколько
+
+
+# "20191044897441 (1).mp4" — та же запись, скачанная второй раз
+_COPY = re.compile(r"^(.*?)(?:\s*\((\d+)\))?(\.[^.]+)$")
+
+
+def base_name(filename):
+    """Имя без пометки о повторном скачивании: "видео (1).mp4" -> "видео.mp4"."""
+    match = _COPY.match(filename)
+    if not match:
+        return filename.lower()
+    return (match.group(1) + match.group(3)).lower()
+
+
+def drop_copies(записи):
+    """Убирает повторные скачивания. записи: [(путь, когда, длительность)].
+
+    Одинаковое имя и одинаковая длительность — это один и тот же ролик,
+    сохранённый дважды. Оставляем тот, у чьего имени нет пометки "(1)".
+    """
+    по_базе = {}
+    for запись in записи:
+        по_базе.setdefault(base_name(os.path.basename(запись[0])), []).append(запись)
+
+    оставить, убрано, подозрительные = [], 0, []
+    for база, группа in по_базе.items():
+        группа.sort(key=lambda з: len(os.path.basename(з[0])))
+        длительности = {з[2] for з in группа if з[2]}
+        if len(длительности) > 1:
+            # Длительность разная — значит это разные видео, оставляем все
+            подозрительные.append(база)
+            оставить.extend(группа)
+            continue
+        оставить.append(группа[0])
+        убрано += len(группа) - 1
+
+    if убрано:
+        log("Повторных скачиваний убрано из списка: %d" % убрано)
+    if подозрительные:
+        log("! У %d имён копии разной длины — оставил все, разберись сам:"
+            % len(подозрительные))
+        for база in подозрительные[:5]:
+            log("    %s" % база)
+    return оставить, убрано
+
+
+def sort_key(записи):
+    """Порядок как в чате. Имена-числа — это номера сообщений, они растут."""
+    имена = [os.path.splitext(os.path.basename(з[0]))[0] for з in записи]
+    чистые = [base_name(os.path.basename(з[0])).rsplit(".", 1)[0] for з in записи]
+    if чистые and all(имя.isdigit() for имя in чистые):
+        log("Имена файлов — номера сообщений, упорядочиваю по ним.")
+        return lambda з: int(base_name(os.path.basename(з[0])).rsplit(".", 1)[0])
+    log("Упорядочиваю по времени съёмки.")
+    return lambda з: (з[1], os.path.basename(з[0]))
 
 
 def make_list(source):
@@ -79,18 +133,20 @@ def make_list(source):
     if not videos:
         raise SystemExit("В %s нет видео." % source)
 
-    log("Нашёл видео: %d. Читаю, когда снято..." % len(videos))
-    строки = []
+    log("Нашёл файлов: %d. Читаю длительность..." % len(videos))
+    записи = []
     for position, path in enumerate(videos, 1):
-        if position % 20 == 0:
+        if position % 25 == 0:
             log("  ...%d из %d" % (position, len(videos)))
         когда, сколько = shot_info(path)
-        строки.append([position, os.path.basename(path), когда, сколько, ""])
+        записи.append((path, когда, сколько))
 
-    # По времени съёмки: видео одной квартиры сняты подряд.
-    строки.sort(key=lambda r: (r[2], r[1]))
-    for position, строка in enumerate(строки, 1):
-        строка[0] = position
+    записи, _убрано = drop_copies(записи)
+    записи.sort(key=sort_key(записи))
+    log("Видео в списке: %d" % len(записи))
+
+    строки = [[position, os.path.basename(path), когда, сколько, ""]
+              for position, (path, когда, сколько) in enumerate(записи, 1)]
 
     path = os.path.join(source, LIST_FILE)
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
@@ -102,7 +158,8 @@ def make_list(source):
     log("Список готов: %s" % path)
     log("")
     log("Что дальше:")
-    log("  1. Открой его в Excel — видео идут по порядку съёмки.")
+    log("  1. Открой его в Excel. Видео идут в том же порядке, что и в чате,")
+    log("     а колонка «длина» поможет узнать нужный ролик.")
     log("  2. В колонке «квартира» проставь номера. Заполняй только первую")
     log("     строку каждой квартиры: пустая клетка = та же, что выше.")
     log("  3. Сохрани (Excel спросит про формат — оставь CSV) и запусти:")
