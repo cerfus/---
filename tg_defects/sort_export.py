@@ -138,6 +138,14 @@ def _html_files(export_dir):
 def _collect(collected):
     """Из списка сообщений делает сведения по файлам и порядок, как в чате."""
     рядом = neighbour_texts(collected)
+    накопленный = []
+    for item in collected:
+        if item["файл"]:
+            item["до"] = "\n".join(накопленный)
+            накопленный = []
+        elif item["текст"].strip():
+            накопленный.append(item["текст"].strip())
+
     info, order = {}, []
     for item in collected:
         if not item["файл"] or item["файл"] in info:
@@ -148,6 +156,9 @@ def _collect(collected):
             "рядом": рядом.get(item["файл"], ""),
             "дата": item["дата"],
             "автор": item["автор"],
+            # Текст сообщений, которые шли перед этим видео без своих файлов:
+            # в логе переписки подпись к пачке пишут именно так.
+            "до": item.get("до", ""),
         }
     return info, order
 
@@ -189,6 +200,76 @@ def read_export_html(export_dir):
     return info, order
 
 
+# --------------------------------------------------------------------------
+# Выгрузка обычным текстом (MAX, WhatsApp и прочие): лог + папка с файлами
+# --------------------------------------------------------------------------
+
+TEXT_EXT = (".txt", ".csv", ".log")
+# "[05.08.2026, 19:04] Иван: Квартира 65" и близкие к тому написания
+_LINE = re.compile(
+    r"^\s*[\[(]?\s*(\d{1,2}[./]\d{1,2}[./]\d{2,4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?)"
+    r"\s*[\])]?\s*[-–—]?\s*([^:]{1,40}?)\s*:\s*(.*)$")
+_FILENAME = re.compile(r"[\w\-. ()@]+?\.(?:mp4|mov|avi|mkv|m4v|webm|3gp|wmv|mpg|mpeg)",
+                       re.IGNORECASE)
+
+
+def _text_files(export_dir):
+    found = []
+    for folder, _dirs, names in os.walk(export_dir):
+        for name in names:
+            if name.lower().endswith(TEXT_EXT) and not name.startswith("_"):
+                found.append(os.path.join(folder, name))
+    return sorted(found)
+
+
+def read_export_text(export_dir, on_disk):
+    """Читает текстовый лог переписки. on_disk: имя файла -> путь внутри выгрузки.
+
+    Формат лога заранее не известен, поэтому опираемся на единственное, что
+    есть наверняка: в строке про вложение упомянуто имя файла. Такая строка —
+    это видео, остальные строки — обычные сообщения.
+    """
+    pages = _text_files(export_dir)
+    if not pages:
+        return {}, []
+
+    by_name = {name.lower(): key for name, key in on_disk.items()}
+    collected = []
+    прочитано = 0
+    for page in pages:
+        try:
+            with open(page, encoding="utf-8", errors="replace") as fh:
+                lines = fh.read().splitlines()
+        except OSError as exc:
+            log("! Не смог прочитать %s: %s" % (os.path.basename(page), exc))
+            continue
+        прочитано += 1
+        for line in lines:
+            match = _LINE.match(line)
+            if match:
+                дата, автор, текст = match.group(1), match.group(2), match.group(3)
+            else:
+                дата, автор, текст = "", "", line
+
+            ключ = ""
+            for кандидат in _FILENAME.findall(line):
+                найдено = by_name.get(кандидат.strip().lower())
+                if найдено:
+                    ключ = найдено
+                    текст = _FILENAME.sub("", текст).strip(" -–—:<>()[]")
+                    break
+            if ключ or текст.strip():
+                collected.append({"файл": ключ, "текст": текст.strip(),
+                                  "дата": дата.replace(",", " ").split()[0] + " " +
+                                          (дата.split()[-1][:5] if ":" in дата else ""),
+                                  "автор": автор.strip()})
+
+    info, order = _collect(collected)
+    log("Прочитал текстовую выгрузку (%d файлов): узнал %d видео из лога."
+        % (прочитано, len(order)))
+    return info, order
+
+
 def find_videos(export_dir, order):
     """Видео в порядке чата: сначала те, что есть в выгрузке, потом остальные.
 
@@ -202,6 +283,9 @@ def find_videos(export_dir, order):
                 path = os.path.join(folder, name)
                 key = os.path.relpath(path, export_dir).replace("\\", "/").lower()
                 on_disk[key] = path
+
+    if order is None:                       # первый проход: только карта файлов
+        return on_disk
 
     ordered, taken = [], set()
     for key in order:
@@ -226,6 +310,12 @@ def detect_from_text(video_path, meta):
     number, how = find_apartment(name)
     if number:
         return number, "имя файла (%s)" % how, name
+
+    before = (meta.get("до") or "").strip()
+    if before:
+        number, how = find_apartment(before)
+        if number:
+            return number, "сообщение перед видео (%s)" % how, before
 
     neighbour = (meta.get("рядом") or "").strip()
     if neighbour:
@@ -478,10 +568,16 @@ def main():
 
     info, order = read_export_json(source)
     if not info:
-        info, order = read_export_html(source)   # выгрузка в HTML
+        info, order = read_export_html(source)   # выгрузка Телеграма в HTML
     if not info:
-        log("! Подписей к видео нет: в папке ни result.json, ни messages.html.")
-        log("  Номер будет определяться только по имени файла.")
+        # Выгрузка из другого мессенджера: текстовый лог рядом с файлами.
+        on_disk = find_videos(source, None)
+        карта = {os.path.basename(key): key for key in on_disk}
+        info, order = read_export_text(source, карта)
+    if not info:
+        log("! Подписей к видео нет: в папке ни result.json, ни messages.html,")
+        log("  ни текстового лога переписки. Номер будет определяться только")
+        log("  по имени файла.")
 
     videos = find_videos(source, order)
     log("Нашёл видео: %d" % len(videos))

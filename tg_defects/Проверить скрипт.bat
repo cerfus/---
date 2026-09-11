@@ -7,5 +7,6 @@ python test_ru_numbers.py
 python test_defects.py
 python test_spread.py
 python test_dupes.py
+python test_text_export.py
 echo.
 pause
