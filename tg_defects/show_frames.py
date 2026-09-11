@@ -14,7 +14,7 @@ import os
 import shutil
 
 from common import VIDEO_EXT, log, read_setting, write_setting
-from plates import _crop_plate, _prepare, grab_frames, ocr_available
+from plates import _crop_digits, _find_plate, _prepare, grab_frames, ocr_available
 
 OUT_DIR = "_кадры"
 
@@ -73,21 +73,26 @@ def main():
             кадр = кадры[0]
             полный = ImageOps.grayscale(Image.open(кадр))
             полный.save(os.path.join(цель, "%02d_%s_кадр.png" % (номер, основа)))
-            вырез = _crop_plate(полный)
-            if вырез is None:
-                log("%d. %s — табличку не выделил вовсе" % (номер, основа))
-            else:
-                _prepare(кадр, 0).save(
-                    os.path.join(цель, "%02d_%s_вырез.png" % (номер, основа)))
-                log("%d. %s — кадр %s, вырез %s" %
-                    (номер, основа, полный.size, вырез.size))
+            табличка = _find_plate(полный, dark=True) or _find_plate(полный, dark=False)
+            if табличка is None:
+                log("%d. %s — таблички в кадре не нашёл" % (номер, основа))
+                continue
+            табличка.save(os.path.join(цель, "%02d_%s_табличка.png" % (номер, основа)))
+            готовые = _prepare(кадр)
+            if готовые:
+                готовые[0].save(
+                    os.path.join(цель, "%02d_%s_цифры.png" % (номер, основа)))
+            log("%d. %s — кадр %s, табличка %s" %
+                (номер, основа, полный.size, табличка.size))
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
     log("")
     log("Картинки здесь: %s" % цель)
-    log("Открой их и посмотри: на «вырезе» должна быть табличка с номером.")
-    log("Если там окно, стена или кусок комнаты — распознавание смотрит не туда.")
+    log("Открой их и посмотри:")
+    log("  ..._табличка.png — что скрипт счёл табличкой")
+    log("  ..._цифры.png    — что он пытается прочитать")
+    log("Если там окно или кусок стены — распознавание смотрит не туда.")
 
 
 if __name__ == "__main__":

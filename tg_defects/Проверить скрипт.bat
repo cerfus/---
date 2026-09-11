@@ -9,5 +9,6 @@ python test_spread.py
 python test_dupes.py
 python test_text_export.py
 python test_by_list.py
+python test_plates.py
 echo.
 pause

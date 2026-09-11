@@ -169,7 +169,7 @@ def не_можно(можно, беда):
     return True
 
 
-def make_list(source, ocr=False, seconds=5, frames=3, confidence=75):
+def make_list(source, ocr=False, seconds=4, frames=8, confidence=55):
     videos = videos_in(source)
     if not videos:
         raise SystemExit("В %s нет видео." % source)
@@ -334,11 +334,11 @@ def main():
                         help="разложить по заполненному списку")
     parser.add_argument("--ocr", action="store_true",
                         help="прочитать номер с таблички в начале видео")
-    parser.add_argument("--seconds", type=int, default=5,
-                        help="сколько секунд начала видео смотреть (по умолчанию 5)")
-    parser.add_argument("--frames", type=int, default=3,
-                        help="сколько кадров брать (по умолчанию 3)")
-    parser.add_argument("--confidence", type=int, default=75,
+    parser.add_argument("--seconds", type=int, default=4,
+                        help="сколько секунд начала видео смотреть (по умолчанию 4)")
+    parser.add_argument("--frames", type=int, default=8,
+                        help="сколько кадров брать (по умолчанию 8)")
+    parser.add_argument("--confidence", type=int, default=55,
                         help="насколько уверенным должно быть чтение, 0-100 "
                              "(по умолчанию 75; ниже — больше ошибок)")
     parser.add_argument("--move", action="store_true",
