@@ -51,11 +51,19 @@ def main():
             "Проще всего удалить папку целиком и разложить заново."
             % os.path.join(root, STATE_FILE))
 
-    known = {os.path.normcase(os.path.abspath(запись.get("файл", "")))
-             for запись in state.values() if запись.get("файл")}
+    # Сравниваем по месту внутри раскладки — «папка/имя файла», а не по
+    # полному пути. Иначе стоит перенести или переименовать D:\Стекла, как
+    # вся память перестанет совпадать и КАЖДЫЙ файл сочтётся лишним.
+    def место(path):
+        return (os.path.normcase(os.path.basename(os.path.dirname(path))),
+                os.path.normcase(os.path.basename(path)))
+
+    known = {место(запись["файл"]) for запись in state.values() if запись.get("файл")}
+    # Исходные имена видео — по ним узнаём, что у лишнего файла есть двойник.
+    originals = sorted({os.path.basename(ключ) for ключ in state}, key=len, reverse=True)
+
     videos = all_videos(root)
-    extra = [path for path in videos
-             if os.path.normcase(os.path.abspath(path)) not in known]
+    extra = [path for path in videos if место(path) not in known]
 
     log("Видео в папках:            %d" % len(videos))
     log("Числится за раскладкой:    %d" % (len(videos) - len(extra)))
@@ -66,9 +74,37 @@ def main():
         log("Всё чисто, дублей нет.")
         return
 
+    # Предохранитель: если память почти ни с чем не совпала, значит она не про
+    # эту папку — раскладку переносили, или подсунут чужой _состояние.json.
+    # Удалять в такой ситуации нельзя ничего.
+    учтено = len(videos) - len(extra)
+    if учтено == 0 or len(extra) > len(videos) / 2:
+        log("")
+        log("СТОП. Память раскладки почти не совпадает с тем, что лежит в папке:")
+        log("  учтено %d из %d видео." % (учтено, len(videos)))
+        log("Похоже, папку переносили или переименовывали, либо рядом лежит")
+        log("чужой %s. Удалять в таком виде нельзя — можно потерять всё." % STATE_FILE)
+        log("")
+        log("Что делать: разложи заново с нуля — удали папку целиком и")
+        log("запусти «Шаг 1 - разложить.bat». Видео возьмутся из выгрузки.")
+        return
+
+    # Удалять можно только то, чей исходник точно лежит в учтённых папках.
+    есть_двойник, единственные = [], []
+    for path in extra:
+        имя = os.path.basename(path).lower()
+        if any(имя.endswith(original.lower()) for original in originals):
+            есть_двойник.append(path)
+        else:
+            единственные.append(path)
+
+    log("  из них с учтённым двойником: %d" % len(есть_двойник))
+    if единственные:
+        log("  БЕЗ двойника (удалять нельзя): %d" % len(единственные))
+
     log("")
     по_папкам = {}
-    for path in extra:
+    for path in есть_двойник:
         по_папкам.setdefault(os.path.basename(os.path.dirname(path)), []).append(path)
     for папка in sorted(по_папкам, key=lambda n: (not n.isdigit(), n)):
         файлы = по_папкам[папка]
@@ -78,6 +114,15 @@ def main():
         if len(файлы) > 3:
             log("        ... и ещё %d" % (len(файлы) - 3))
 
+    if единственные:
+        log("")
+        log("Эти файлы единственные в своём роде — их не удаляю,")
+        log("разберись с ними руками:")
+        for path in единственные[:10]:
+            log("    %s" % path)
+        if len(единственные) > 10:
+            log("    ... и ещё %d" % (len(единственные) - 10))
+
     if not args.delete:
         log("")
         log("Это только показ. Чтобы удалить лишнее:")
@@ -86,7 +131,7 @@ def main():
 
     log("")
     removed = 0
-    for path in extra:
+    for path in есть_двойник:
         try:
             os.remove(path)
             removed += 1
