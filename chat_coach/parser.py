@@ -1,0 +1,324 @@
+# -*- coding: utf-8 -*-
+"""
+Разбор выгрузки переписки в список сообщений.
+
+Понимает три формата, которые реально приходят от людей:
+
+  1. result.json     — «Экспорт истории чата» в Телеграме, формат JSON;
+  2. messages*.html  — тот же экспорт, но формат HTML;
+  3. обычный текст   — лог вида «[05.08.2026, 19:04] Имя: текст».
+
+Каждое сообщение — словарь:
+
+    {"автор": "Аня", "дата": datetime | None, "текст": "привет",
+     "вложение": False}
+
+Сообщения без текста (фото, стикер, кружок) тоже попадают в список:
+для метрик важно, что человек в этот момент вышел на связь, а не что
+именно он прислал. Служебные записи — «присоединился к чату», звонки,
+закреплённые сообщения — выкидываются: это не переписка.
+
+Разбор JSON и HTML взят из tg_defects/sort_export.py, где он обкатан на
+настоящих выгрузках, и урезан: там искали видеофайлы, здесь нужен текст.
+"""
+
+import html as html_module
+import json
+import os
+import re
+from datetime import datetime
+
+# --------------------------------------------------------------------------
+# Общее
+# --------------------------------------------------------------------------
+
+# Ключи выгрузки, по которым видно, что в сообщении было вложение.
+MEDIA_KEYS = ("photo", "file", "media_type", "sticker_emoji", "poll",
+              "location_information", "contact_information")
+
+ЛИЧНОЕ = "личное"          # чем помечаем сообщение без автора
+
+
+def flatten_text(value):
+    """В выгрузке текст бывает строкой, а бывает списком кусков.
+
+    Ссылки, жирный шрифт и упоминания Телеграм кладёт отдельными
+    словарями — без склейки половина сообщений приедет пустыми.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(item.get("text", ""))
+        return "".join(parts)
+    return ""
+
+
+_ДАТА = re.compile(
+    r"(\d{1,2})[./](\d{1,2})[./](\d{2,4})"      # 05.08.2026
+    r"[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?")     # 19:04 или 19:04:05
+
+
+def parse_date(text):
+    """Дату пишут кто во что горазд. Возвращает datetime или None.
+
+    Понимает ISO из result.json и человеческие написания из HTML
+    и текстовых логов. Часовой пояс отбрасываем: все метрики считаются
+    по разнице между сообщениями одной переписки, а она от пояса
+    не зависит.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "").strip()[:19])
+    except ValueError:
+        pass
+    match = _ДАТА.search(text)
+    if not match:
+        return None
+    день, месяц, год, час, минута, секунда = match.groups()
+    год = int(год)
+    if год < 100:                       # «05.08.26» — это 2026-й
+        год += 2000
+    try:
+        return datetime(год, int(месяц), int(день), int(час), int(минута),
+                        int(секунда or 0))
+    except ValueError:
+        return None                     # 31 февраля и прочая экзотика
+
+
+def _сообщение(автор, дата, текст, вложение=False):
+    return {"автор": (автор or ЛИЧНОЕ).strip(),
+            "дата": дата,
+            "текст": (текст or "").strip(),
+            "вложение": bool(вложение)}
+
+
+# --------------------------------------------------------------------------
+# Формат 1: result.json
+# --------------------------------------------------------------------------
+
+def read_json(path):
+    """Читает result.json из «Экспорта истории чата»."""
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    сообщения = []
+    for message in data.get("messages", []):
+        if message.get("type") == "service":
+            continue                    # «создал группу», звонки, закрепы
+        автор = message.get("from") or message.get("from_id") or ""
+        # Берём именно строку date, а не date_unixtime: в ней местное время
+        # того, кто делал выгрузку. Метрика «ночное общение» считает часы
+        # по стенным часам собеседников, а fromtimestamp на сервере в UTC
+        # сдвинул бы всю переписку на несколько часов.
+        дата = parse_date(message.get("date") or "")
+        if дата is None:
+            unix = message.get("date_unixtime")
+            try:
+                дата = datetime.fromtimestamp(int(unix)) if unix else None
+            except (ValueError, OSError, OverflowError, TypeError):
+                дата = None
+        текст = flatten_text(message.get("text"))
+        вложение = any(key in message for key in MEDIA_KEYS)
+        if текст or вложение:
+            сообщения.append(_сообщение(автор, дата, текст, вложение))
+    return сообщения
+
+
+# --------------------------------------------------------------------------
+# Формат 2: messages*.html
+# --------------------------------------------------------------------------
+
+_TAGS = re.compile(r"<[^>]+>")
+_TEXT = re.compile(r'<div class="text">(.*?)</div>', re.S)
+_FROM = re.compile(r'<div class="from_name">(.*?)</div>', re.S)
+_DATE = re.compile(r'<div class="pull_right date details"[^>]*title="([^"]*)"')
+_MEDIA = re.compile(r'class="media_wrap|class="photo_wrap|<img class="', re.I)
+
+
+def _plain(fragment):
+    """Из куска HTML делает обычный текст."""
+    if not fragment:
+        return ""
+    fragment = re.sub(r"<br\s*/?>", "\n", fragment)
+    return html_module.unescape(_TAGS.sub("", fragment)).strip()
+
+
+def _html_files(folder):
+    """messages.html, messages2.html, ... по-человечески по порядку."""
+    found = []
+    for name in os.listdir(folder):
+        match = re.fullmatch(r"messages(\d*)\.html", name, re.I)
+        if match:
+            found.append((int(match.group(1) or 1), os.path.join(folder, name)))
+    return [path for _number, path in sorted(found)]
+
+
+def read_html(path):
+    """Читает выгрузку в HTML: либо папку с messages*.html, либо один файл."""
+    страницы = _html_files(path) if os.path.isdir(path) else [path]
+
+    сообщения = []
+    предыдущий_автор = ""
+    for страница in страницы:
+        with open(страница, encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+        for block in content.split('<div class="message ')[1:]:
+            if block.startswith("service"):
+                continue
+            автор = _FROM.search(block)
+            автор = _plain(автор.group(1)) if автор else ""
+            # Подряд идущие сообщения одного человека Телеграм «склеивает»
+            # и имя не повторяет — иначе половина реплик осталась бы ничьей.
+            if автор:
+                предыдущий_автор = автор
+            else:
+                автор = предыдущий_автор
+            дата = _DATE.search(block)
+            текст = _TEXT.search(block)
+            текст = _plain(текст.group(1)) if текст else ""
+            вложение = bool(_MEDIA.search(block))
+            if текст or вложение:
+                сообщения.append(_сообщение(автор, parse_date(дата.group(1) if дата else ""),
+                                            текст, вложение))
+    return сообщения
+
+
+# --------------------------------------------------------------------------
+# Формат 3: обычный текстовый лог
+# --------------------------------------------------------------------------
+
+# «[05.08.2026, 19:04] Иван: привет» и близкие к тому написания,
+# включая вариант WhatsApp «05.08.2026, 19:04 - Иван: привет».
+_LINE = re.compile(
+    r"^\s*[\[(]?\s*(\d{1,2}[./]\d{1,2}[./]\d{2,4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?)"
+    r"\s*[\])]?\s*[-–—]?\s*([^:]{1,40}?)\s*:\s*(.*)$")
+
+# «<прикреплён: video.mp4>», «<Media omitted>» и подобные пометки о вложении.
+_ВЛОЖЕНИЕ = re.compile(
+    r"<[^>]*(?:прикрепл|вложен|media|attached|omitted)[^>]*>"
+    r"|\b[\w\-. ()@]+\.(?:jpg|jpeg|png|gif|mp4|mov|webm|ogg|opus|pdf|webp)\b",
+    re.IGNORECASE)
+
+
+def read_text(path):
+    """Читает лог переписки обычным текстом."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        строки = fh.read().splitlines()
+
+    сообщения = []
+    for строка in строки:
+        match = _LINE.match(строка)
+        if not match:
+            # Многострочное сообщение: продолжение приписываем предыдущему,
+            # иначе длина сообщений посчитается неверно.
+            if сообщения and строка.strip():
+                сообщения[-1]["текст"] = (сообщения[-1]["текст"] + "\n"
+                                          + строка.strip()).strip()
+            continue
+        дата, автор, текст = match.groups()
+        вложение = bool(_ВЛОЖЕНИЕ.search(текст))
+        if вложение:
+            текст = _ВЛОЖЕНИЕ.sub("", текст).strip(" -–—:<>()[]")
+        сообщения.append(_сообщение(автор, parse_date(дата), текст, вложение))
+    return сообщения
+
+
+# --------------------------------------------------------------------------
+# Точка входа
+# --------------------------------------------------------------------------
+
+# Выгрузка без медиа — это несколько мегабайт текста. Потолок с большим
+# запасом: он не про удобство, а про то, чтобы присланный архив не смог
+# развернуться в гигабайты и забить диск.
+ПРЕДЕЛ_РАСПАКОВКИ = 300 * 1024 * 1024
+
+
+def unpack(архив, куда):
+    """Распаковывает zip с выгрузкой. Возвращает папку с содержимым."""
+    import zipfile
+
+    корень = os.path.abspath(куда)
+    os.makedirs(корень, exist_ok=True)
+    with zipfile.ZipFile(архив) as зип:
+        записи = зип.infolist()
+        if sum(запись.file_size for запись in записи) > ПРЕДЕЛ_РАСПАКОВКИ:
+            raise ValueError("Архив слишком большой в распакованном виде.")
+        for запись in записи:
+            # Имена вроде «../../etc/passwd» внутри архива — известный приём,
+            # поэтому распаковываем по одной записи и лишнее просто пропускаем.
+            цель = os.path.abspath(os.path.join(корень, запись.filename))
+            if цель == корень or цель.startswith(корень + os.sep):
+                зип.extract(запись, корень)
+
+    # Телеграм кладёт всё в одну папку внутри архива — заходим в неё.
+    внутри = [имя for имя in os.listdir(корень)
+              if not имя.startswith((".", "__"))]
+    if len(внутри) == 1 and os.path.isdir(os.path.join(корень, внутри[0])):
+        return os.path.join(корень, внутри[0])
+    return корень
+
+
+def read_export(path):
+    """Разбирает выгрузку, сам определяя формат. Путь — файл, папка или zip.
+
+    Архив распаковывается в папку рядом с ним: бот присылает архив во
+    временный каталог и сносит его целиком, так что мусора не остаётся.
+    """
+    if path.lower().endswith(".zip"):
+        return read_export(unpack(path, path + "_распакован"))
+
+    if os.path.isdir(path):
+        if _html_files(path):
+            return read_html(path)
+        result = os.path.join(path, "result.json")
+        if os.path.exists(result):
+            return read_json(result)
+        for name in sorted(os.listdir(path)):
+            if name.lower().endswith((".txt", ".log")):
+                return read_text(os.path.join(path, name))
+        raise ValueError("В папке нет ни result.json, ни messages.html, "
+                         "ни текстового лога.")
+
+    имя = path.lower()
+    if имя.endswith(".json"):
+        return read_json(path)
+    if имя.endswith((".html", ".htm")):
+        return read_html(path)
+    if имя.endswith((".txt", ".log", ".csv")):
+        return read_text(path)
+    raise ValueError("Не понимаю формат файла: нужен .json, .html или .txt")
+
+
+def participants(сообщения):
+    """Кто писал и сколько раз, от самого разговорчивого к молчуну."""
+    счёт = {}
+    for сообщение in сообщения:
+        автор = сообщение["автор"]
+        if автор and автор != ЛИЧНОЕ:
+            счёт[автор] = счёт.get(автор, 0) + 1
+    return sorted(счёт.items(), key=lambda пара: (-пара[1], пара[0]))
+
+
+def two_sides(сообщения):
+    """Двое главных собеседников.
+
+    В переписке один на один бывает третий участник — бот или человек,
+    написавший пару раз. Поэтому берём двух самых активных, а не всех
+    подряд, и отдельно сообщаем, если разговор всё же групповой.
+    """
+    люди = participants(сообщения)
+    if len(люди) < 2:
+        return [имя for имя, _ in люди], False
+    всего = sum(сколько for _, сколько in люди)
+    первые_двое = люди[0][1] + люди[1][1]
+    # Если на двоих приходится меньше 85% сообщений — это группа,
+    # и разбор «он и она» к ней неприменим.
+    групповой = первые_двое < всего * 0.85
+    return [люди[0][0], люди[1][0]], групповой
