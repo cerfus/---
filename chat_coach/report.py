@@ -170,8 +170,8 @@ def main():
 
     явная = False
     if аргументы.вставка:
-        with open(источник, encoding="utf-8", errors="replace") as fh:
-            сообщения, явная = export_parser.read_pasted(fh.read())
+        сообщения, явная = export_parser.read_pasted(
+            export_parser.прочитать_текст(источник))
     else:
         сообщения = export_parser.read_export(источник)
     if not сообщения:
