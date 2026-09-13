@@ -10,6 +10,7 @@ import shutil
 import tempfile
 from datetime import datetime
 
+import console          # noqa: F401
 import limits
 import storage
 

@@ -11,6 +11,7 @@
 
 from datetime import timedelta
 
+import console          # noqa: F401
 import analysis
 import metrics
 import test_metrics as образцы
