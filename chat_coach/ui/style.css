@@ -188,6 +188,14 @@ textarea:focus, input:focus { outline: 2px solid var(--полоска); outline-
   font-weight: 700;
   letter-spacing: -.02em;
 }
+/* Рамка стоит над вердиктом и звучит тише его: это подпись к линейке,
+   а не вывод. Вывод — строкой ниже. */
+.рамка {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--текст-второй);
+  margin: 0 0 6px;
+}
 .вердикт { font-size: 16px; margin: 4px 0 8px; }
 
 .дельта { font-size: 13.5px; margin: 0; font-weight: 600; }

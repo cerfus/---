@@ -73,12 +73,16 @@
 
   <!-- Отчёт -->
   <section class="карточка" id="отчёт" hidden>
+    <!-- Отказ идёт до всяких цифр: индекс отвечает не на тот вопрос. -->
+    <div class="стоп" id="рамка-стоп" hidden></div>
+
     <div class="итог">
       <div class="итог-число">
         <div class="hero" id="индекс">—</div>
         <div class="пояснение" id="индекс-подпись">из 100</div>
       </div>
       <div class="итог-слова">
+        <p class="рамка" id="рамка" hidden></p>
         <p class="вердикт" id="вердикт"></p>
         <p class="пояснение" id="период"></p>
         <p id="тренд" class="дельта" hidden></p>

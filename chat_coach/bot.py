@@ -33,6 +33,7 @@ from aiogram.types import (CallbackQuery, InlineKeyboardButton,
 
 import analysis
 import console          # noqa: F401  — правит вывод на Windows при импорте
+import frame
 import limits
 import metrics
 import parser as export_parser
@@ -51,6 +52,7 @@ import texts
 ПРЕДЕЛ_КУСКОВ = 20
 ПРЕДЕЛ_ВСТАВКИ = 100 * 1024
 ПРЕДЕЛ_СООБЩЕНИЯ = 3500          # у Телеграма 4096, оставляем запас на разметку
+МИНИМУМ_ЧЕРНОВИКА = 2            # «ок» — уже сообщение, а один символ — нет
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
@@ -65,6 +67,7 @@ class Шаги(StatesGroup):
     выбор_себя = State()
     выбор_цели = State()
     готово = State()
+    черновик = State()
 
 
 # --------------------------------------------------------------------------
@@ -88,6 +91,7 @@ def _кнопки(пары, в_ряд=1):
                             (texts.КНОПКА_ВСТАВИТЬ, "вставить")])
 КНОПКА_ВЫГРУЗКИ = НАЧАЛЬНЫЕ_КНОПКИ
 КНОПКА_ГОТОВО = _кнопки([(texts.КНОПКА_ГОТОВО, "вставка_готово")])
+КНОПКА_ЧЕРНОВИКА = _кнопки([(texts.КНОПКА_ЧЕРНОВИК, "черновик")])
 
 
 def _нарезать(текст):
@@ -134,9 +138,9 @@ async def _убрать(сообщение):
 
 
 async def _остатки(user_id):
-    разборов = await asyncio.to_thread(limits.осталось, база, user_id, limits.РАЗБОР)
-    вопросов = await asyncio.to_thread(limits.осталось, база, user_id, limits.ВОПРОС)
-    return разборов, вопросов
+    return tuple(
+        [await asyncio.to_thread(limits.осталось, база, user_id, вид)
+         for вид in (limits.РАЗБОР, limits.ВОПРОС, limits.ЧЕРНОВИК)])
 
 
 # --------------------------------------------------------------------------
@@ -163,8 +167,8 @@ async def помощь(сообщение: Message):
 
 @диспетчер.message(Command("лимит"))
 async def лимит(сообщение: Message):
-    разборов, вопросов = await _остатки(сообщение.from_user.id)
-    await сообщение.answer(texts.ПОДСКАЗКА_ЛИМИТА % (разборов, вопросов))
+    await сообщение.answer(
+        texts.ПОДСКАЗКА_ЛИМИТА % await _остатки(сообщение.from_user.id))
 
 
 @диспетчер.message(Command("удалить"))
@@ -363,29 +367,39 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
         await _послать(запрос.message, texts.ОШИБКА % сбой)
         return
 
-    await _послать(запрос.message, report.текст_отчёта(итог), моноширинно=True)
+    рамка = await asyncio.to_thread(frame.определить, сообщения, я, она, итог)
+    await _послать(запрос.message, report.текст_отчёта(итог, рамка=рамка),
+                   моноширинно=True)
 
     отобранное = await asyncio.to_thread(analysis.выборка, сообщения, я, она)
     # Дальше переписка не нужна: держим только обезличенную выборку.
-    await state.update_data(сообщения=None, итог=итог, отобранное=отобранное)
+    await state.update_data(сообщения=None, итог=итог, отобранное=отобранное,
+                            рамка=рамка)
+    await asyncio.to_thread(база.записать_отчёт, user_id, итог)
+    await state.set_state(Шаги.готово)
+
+    if frame.стоп(рамка):
+        # Отказ найден питоном, до всякой модели. Звать её незачем: любой
+        # совет был бы про то, как обойти чужое «нет», а он всё равно не
+        # будет показан. Деньги не тратим, попытку возвращаем.
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР)
+        await _послать(запрос.message, texts.СТОП_БЕЗ_ИИ)
+        return
 
     думаю = await запрос.message.answer(texts.ДУМАЮ)
     try:
         разбор_ии = await asyncio.to_thread(
-            analysis.разобрать, None, итог, цель, отобранное=отобранное)
+            analysis.разобрать, None, итог, цель, отобранное=отобранное,
+            рамка=рамка)
     except analysis.ОшибкаРазбора as сбой:
         await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР)
         await _убрать(думаю)
         await _послать(запрос.message, texts.ОШИБКА % сбой)
         return
-    finally:
-        await asyncio.to_thread(база.записать_отчёт, user_id, итог)
 
     await _убрать(думаю)
     await _послать(запрос.message, analysis.текст_разбора(разбор_ии))
-
-    await state.set_state(Шаги.готово)
-    await _послать(запрос.message, texts.ГОТОВО)
+    await _послать(запрос.message, texts.ГОТОВО, кнопки=КНОПКА_ЧЕРНОВИКА)
 
 
 # --------------------------------------------------------------------------
@@ -415,14 +429,90 @@ async def вопрос(сообщение: Message, state: FSMContext):
     try:
         ответ = await asyncio.to_thread(
             analysis.спросить, данные["итог"], данные["отобранное"],
-            сообщение.text)
+            сообщение.text, рамка=данные.get("рамка"))
     except analysis.ОшибкаРазбора as сбой:
         await asyncio.to_thread(limits.вернуть, база, user_id, limits.ВОПРОС)
         await _убрать(думаю)
         await _послать(сообщение, texts.ОШИБКА % сбой)
         return
     await _убрать(думаю)
-    await _послать(сообщение, ответ)
+    await _послать(сообщение, ответ, кнопки=КНОПКА_ЧЕРНОВИКА)
+
+
+# --------------------------------------------------------------------------
+# Черновик: проверка одного сообщения перед отправкой
+# --------------------------------------------------------------------------
+
+async def _начать_черновик(сообщение, state):
+    """Общий вход для кнопки и команды: проверить, что есть с чем работать."""
+    данные = await state.get_data()
+    if not данные.get("итог"):
+        await _послать(сообщение, texts.НЕТ_РАЗБОРА, кнопки=НАЧАЛЬНЫЕ_КНОПКИ)
+        return
+    if frame.стоп(данные.get("рамка")):
+        # То же правило, что и в разборе. Проверять черновик к человеку,
+        # который уже ответил, — это и есть «помочь обойти отказ».
+        await _послать(сообщение, frame.стоп_текст(данные["рамка"]))
+        return
+    await state.set_state(Шаги.черновик)
+    await _послать(сообщение, texts.ЧЕРНОВИК_КАК)
+
+
+@диспетчер.callback_query(F.data == "черновик")
+async def черновик_кнопка(запрос: CallbackQuery, state: FSMContext):
+    await запрос.answer()
+    await _начать_черновик(запрос.message, state)
+
+
+@диспетчер.message(Command("черновик"))
+async def черновик_команда(сообщение: Message, state: FSMContext):
+    await _начать_черновик(сообщение, state)
+
+
+@диспетчер.message(Шаги.черновик, F.text & ~F.text.startswith("/"))
+async def черновик_текст(сообщение: Message, state: FSMContext):
+    # Вставили переписку вместо черновика — разбираем её. Проверка до
+    # списания квоты, как и в вопросах: чужая ошибка не должна стоить попытки.
+    новая, явная = export_parser.похоже_на_переписку(сообщение.text,
+                                                     МИНИМУМ_ВСТАВКИ)
+    if новая:
+        await _послать(сообщение, texts.ПОХОЖЕ_НА_ПЕРЕПИСКУ)
+        await _принять(сообщение, state, новая, вставка=True, явная=явная)
+        return
+
+    текст = (сообщение.text or "").strip()
+    if len(текст) < МИНИМУМ_ЧЕРНОВИКА:
+        await _послать(сообщение, texts.ЧЕРНОВИК_ПУСТО)
+        return
+
+    user_id = сообщение.from_user.id
+    можно = await asyncio.to_thread(limits.потратить, база, user_id,
+                                    limits.ЧЕРНОВИК)
+    if not можно:
+        await _послать(сообщение,
+                       texts.ЛИМИТ % limits.текст_лимита(limits.ЧЕРНОВИК),
+                       кнопки=_кнопки([("Хочу премиум", "премиум:черновики")]))
+        return
+
+    данные = await state.get_data()
+    думаю = await сообщение.answer(texts.ЧЕРНОВИК_ДУМАЮ)
+    try:
+        проверенный = await asyncio.to_thread(
+            analysis.черновик, данные["итог"], данные["отобранное"], текст,
+            данные.get("рамка"))
+    except analysis.ОшибкаРазбора as сбой:
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ЧЕРНОВИК)
+        await _убрать(думаю)
+        await _послать(сообщение, texts.ОШИБКА % сбой)
+        return
+    finally:
+        # Возвращаемся в «готово» при любом исходе: иначе следующий вопрос
+        # человека молча уедет в разбор черновика.
+        await state.set_state(Шаги.готово)
+
+    await _убрать(думаю)
+    await _послать(сообщение, analysis.текст_черновика(проверенный),
+                   кнопки=КНОПКА_ЧЕРНОВИКА)
 
 
 @диспетчер.message(F.text & ~F.text.startswith("/"))
