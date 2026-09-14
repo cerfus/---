@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разбор переписки</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+
+<header class="шапка">
+  <h1>Разбор переписки</h1>
+  <div class="шапка-кнопки">
+    <button id="тема" class="плоская" type="button" title="Светлая или тёмная">◐</button>
+    <button id="закрыть" class="плоская" type="button">Закрыть программу</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Шаг 1: откуда брать переписку -->
+  <section class="карточка" id="шаг-ввод">
+    <h2>1. Дай переписку</h2>
+    <p class="пояснение">
+      В Телеграме выдели сообщения → «Копировать» → вставь сюда.
+      Или выбери файл выгрузки: result.json, архив .zip, messages.html, .txt.
+    </p>
+
+    <textarea id="текст" rows="10" spellcheck="false"
+      placeholder="Аня, [05.09.2026 19:04]
+привет! как день прошёл?
+
+Иван, [05.09.2026 19:06]
+нормально
+
+…или размечай руками, по строке на сообщение:
+
+я: привет
+она: привет!"></textarea>
+
+    <div class="ряд">
+      <label class="кнопка вторая">
+        Выбрать файл
+        <input type="file" id="файл" accept=".json,.zip,.html,.htm,.txt,.log" hidden>
+      </label>
+      <span id="имя-файла" class="пояснение"></span>
+      <button id="разобрать" class="кнопка" type="button">Разобрать</button>
+    </div>
+
+    <p class="пояснение тихо">
+      Файл никуда не отправляется и нигде не сохраняется: программа работает
+      на этом компьютере и забывает переписку, как только закроешь окно.
+    </p>
+  </section>
+
+  <!-- Шаг 2: кто есть кто и зачем -->
+  <section class="карточка" id="шаг-стороны" hidden>
+    <h2>2. Кто из них ты?</h2>
+    <div class="ряд" id="стороны"></div>
+
+    <h2>3. Чего хочешь добиться?</h2>
+    <p class="пояснение">От этого зависят советы.</p>
+    <div class="ряд" id="цели"></div>
+
+    <div class="ряд">
+      <button id="показать" class="кнопка" type="button" disabled>Показать разбор</button>
+      <label class="галочка">
+        <input type="checkbox" id="с-ии" checked>
+        разобрать сообщения через Claude
+      </label>
+    </div>
+  </section>
+
+  <!-- Отчёт -->
+  <section class="карточка" id="отчёт" hidden>
+    <div class="итог">
+      <div class="итог-число">
+        <div class="hero" id="индекс">—</div>
+        <div class="пояснение" id="индекс-подпись">из 100</div>
+      </div>
+      <div class="итог-слова">
+        <p class="вердикт" id="вердикт"></p>
+        <p class="пояснение" id="период"></p>
+        <p id="тренд" class="дельта" hidden></p>
+      </div>
+    </div>
+
+    <h3>Из чего сложилось</h3>
+    <div id="факторы" class="факторы"></div>
+
+    <div id="пробелы" hidden>
+      <h3>Не посчитано</h3>
+      <p class="пояснение">
+        В этом тексте для них нет данных. Вес разошёлся по остальным факторам —
+        в выгрузке есть даты и вся история, с ней картина будет полнее.
+      </p>
+      <ul id="пробелы-список" class="список"></ul>
+    </div>
+
+    <h3>Цифры</h3>
+    <table class="цифры"><tbody id="цифры"></tbody></table>
+
+    <div id="ии" hidden></div>
+
+    <p class="пояснение тихо">
+      Это статистика переписки, а не измерение чувств: она описывает, как идёт
+      общение, и ничего не знает о человеке.
+    </p>
+  </section>
+
+  <!-- Ключ -->
+  <section class="карточка" id="шаг-ключ">
+    <h2>Ключ Claude</h2>
+    <p class="пояснение" id="про-ключ">
+      Без ключа считаются только цифры — они бесплатные. Разбор самих
+      сообщений идёт через Claude, для него нужен ключ с console.anthropic.com.
+      Хранится тут же, в файле настройки.json.
+    </p>
+    <div class="ряд">
+      <input type="password" id="ключ" placeholder="sk-ant-..." autocomplete="off">
+      <button id="сохранить-ключ" class="кнопка вторая" type="button">Сохранить</button>
+      <span id="ключ-статус" class="пояснение"></span>
+    </div>
+  </section>
+
+</main>
+
+<div id="беда" class="беда" hidden></div>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>
