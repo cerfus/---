@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import threading
 import urllib.error
 import urllib.parse
@@ -188,7 +189,17 @@ def случай_сердцебиение():
     код, ответ = сходить("/api/ping", {})
     продлилось = app.последний_стук >= было
     выход = сходить("/api/quit", {})
-    закрылся = сервер._BaseServer__shutdown_request
+
+    # Ждём, а не смотрим сразу: сервер сперва отвечает браузеру и только
+    # потом гасится отдельным потоком. Проверка, читавшая флаг мгновенно,
+    # мигала примерно в половине прогонов — и это была её вина, не его.
+    закрылся = False
+    for _ in range(50):
+        if сервер._BaseServer__shutdown_request:
+            закрылся = True
+            break
+        time.sleep(0.02)
+
     ок = (код == 200 and ответ == {"живой": True}
           and продлилось and выход[0] == 200 and закрылся)
     return ок, "сердцебиение: пинг=%s продлилось=%s выход=%s закрылся=%s" % (
