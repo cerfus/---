@@ -10,3 +10,7 @@ config.ini
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+
+# Окно: ключ Claude и лог запуска
+настройки.json
+_лог.txt
