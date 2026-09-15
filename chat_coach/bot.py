@@ -17,8 +17,8 @@
 import asyncio
 import html
 import logging
-import re
 import os
+import re
 import shutil
 import tempfile
 
@@ -33,6 +33,9 @@ from aiogram.types import (BotCommand, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, LabeledPrice, Message,
                            PreCheckoutQuery)
 
+# settings идёт первым намеренно: он подхватывает .env при импорте,
+# а analysis читает переменные окружения уже на своём.
+import settings         # noqa: F401  — читает .env при импорте
 import analysis
 import console          # noqa: F401  — правит вывод на Windows при импорте
 import frame
@@ -814,9 +817,15 @@ async def текст_без_разбора(сообщение: Message, state: F
 # --------------------------------------------------------------------------
 
 async def main():
+    # Имена, и только имена: значения — это ключи, им в журнале не место.
+    if settings.ПОДХВАЧЕНО:
+        журнал.info("из .env: %s", ", ".join(settings.ПОДХВАЧЕНО))
+
     токен = os.getenv("BOT_TOKEN")
     if not токен:
-        raise SystemExit("Не задан BOT_TOKEN. Возьми его у @BotFather.")
+        raise SystemExit("Не задан BOT_TOKEN. Возьми его у @BotFather "
+                         "и впиши в файл .env рядом с bot.py "
+                         "(образец — .env.example).")
     бот = Bot(токен, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # Меню бот ставит себе сам, а не человек руками у BotFather. Список

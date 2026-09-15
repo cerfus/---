@@ -22,6 +22,7 @@ import html
 import os
 import sys
 
+import settings         # noqa: F401  — читает .env при импорте
 import console          # noqa: F401  — правит вывод на Windows при импорте
 import frame
 import metrics

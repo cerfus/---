@@ -36,6 +36,7 @@ import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import settings         # noqa: F401  — читает .env при импорте
 import console          # noqa: F401  — правит вывод на Windows при импорте
 import frame
 import metrics
@@ -97,7 +98,12 @@ def сохранить_настройки(настройки):
 
 
 def применить_ключ(ключ):
-    """Кладём ключ в окружение — analysis.py берёт его оттуда."""
+    """Кладём ключ в окружение — analysis.py берёт его оттуда.
+
+    Вызывается после импорта, а значит поверх того, что подхватил .env:
+    поле, заполненное руками в самом окне, главнее файла. Пустое поле
+    ключ из .env не стирает — стирает только явная очистка в настройках.
+    """
     ключ = (ключ or "").strip()
     if ключ:
         os.environ["ANTHROPIC_API_KEY"] = ключ

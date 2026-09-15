@@ -9,6 +9,11 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     env_file: ../.env
+    # Путь к базе ставим здесь, а не в .env: тот же файл читают на Windows
+    # при обычном запуске, и там «/data» — это корень диска C:. В compose
+    # environment сильнее env_file, так что строка в чьём-то .env не помешает.
+    environment:
+      CHAT_COACH_DB: /data/bot.sqlite3
     # Бот должен подниматься сам после перезагрузки сервера и после падения:
     # напоминания и разборы не ждут, пока кто-то заметит, что он лежит.
     restart: unless-stopped
