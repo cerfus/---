@@ -28,7 +28,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import (CallbackQuery, InlineKeyboardButton,
+from aiogram.types import (BotCommand, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, LabeledPrice, Message,
                            PreCheckoutQuery)
 
@@ -80,6 +80,20 @@ class Шаги(StatesGroup):
 # --------------------------------------------------------------------------
 # Мелочи
 # --------------------------------------------------------------------------
+
+def _команда(имя):
+    """Фильтр на латинское имя команды и её русский синоним разом.
+
+    Имена команд Телеграм принимает только латиницей, поэтому меню и
+    автодополнение живут на латинице. Кириллическую при этом отнимать
+    не за что: aiogram разбирает сырой текст сообщения, так что
+    напечатанная руками /удалить продолжает работать.
+    """
+    for латиница, кириллица, _описание in texts.КОМАНДЫ:
+        if латиница == имя:
+            return Command(латиница, кириллица)
+    raise KeyError("Нет такой команды: %s" % имя)
+
 
 def _кнопки(пары, в_ряд=1):
     """пары: [(подпись, данные), ...]"""
@@ -187,17 +201,17 @@ async def как_выгрузить(запрос: CallbackQuery):
     await _послать(запрос.message, texts.КАК_ВЫГРУЗИТЬ)
 
 
-@диспетчер.message(Command("помощь"))
+@диспетчер.message(_команда("help"))
 async def помощь(сообщение: Message):
     await _послать(сообщение, texts.КАК_ВЫГРУЗИТЬ)
 
 
-@диспетчер.message(Command("лимит"))
+@диспетчер.message(_команда("limit"))
 async def лимит(сообщение: Message):
     await сообщение.answer(await _текст_остатков(сообщение.from_user.id))
 
 
-@диспетчер.message(Command("удалить"))
+@диспетчер.message(_команда("delete"))
 async def удалить(сообщение: Message, state: FSMContext):
     await state.clear()
     await asyncio.to_thread(база.забыть, сообщение.from_user.id)
@@ -218,7 +232,7 @@ async def удалить(сообщение: Message, state: FSMContext):
 # написано ровно про такой обход.
 
 
-@диспетчер.message(Command("купить"))
+@диспетчер.message(_команда("buy"))
 async def купить_команда(сообщение: Message):
     await _послать(сообщение, texts.МАГАЗИН, кнопки=_витрина())
 
@@ -291,7 +305,7 @@ async def оплачено(сообщение: Message):
     await _послать(сообщение, await _текст_остатков(user_id))
 
 
-@диспетчер.message(Command("возврат"))
+@диспетчер.message(Command(*texts.КОМАНДА_ВОЗВРАТА))
 async def возврат(сообщение: Message, command: CommandObject):
     """Вернуть звёзды по номеру платежа. Только для своего человека.
 
@@ -660,7 +674,7 @@ async def подсказка_кнопка(запрос: CallbackQuery, state: FS
     await _подсказать(запрос.message, state, запрос.from_user.id)
 
 
-@диспетчер.message(Command("написать"))
+@диспетчер.message(_команда("write"))
 async def подсказка_команда(сообщение: Message, state: FSMContext):
     await _подсказать(сообщение, state, сообщение.from_user.id)
 
@@ -690,7 +704,7 @@ async def черновик_кнопка(запрос: CallbackQuery, state: FSMC
     await _начать_черновик(запрос.message, state)
 
 
-@диспетчер.message(Command("черновик"))
+@диспетчер.message(_команда("draft"))
 async def черновик_команда(сообщение: Message, state: FSMContext):
     await _начать_черновик(сообщение, state)
 
@@ -765,6 +779,17 @@ async def main():
     if not токен:
         raise SystemExit("Не задан BOT_TOKEN. Возьми его у @BotFather.")
     бот = Bot(токен, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+    # Меню бот ставит себе сам, а не человек руками у BotFather. Список
+    # один и лежит в texts.КОМАНДЫ, так что разъехаться коду и меню негде.
+    try:
+        await бот.set_my_commands(
+            [BotCommand(command=имя, description=описание)
+             for имя, _синоним, описание in texts.КОМАНДЫ])
+    except Exception as сбой:                      # noqa: BLE001
+        # Не вышло — и ладно: без меню бот работает, а без старта нет.
+        журнал.warning("меню команд не поставилось: %s", сбой)
+
     журнал.info("бот запущен, модель %s", analysis.МОДЕЛЬ)
     await диспетчер.start_polling(бот)
 
