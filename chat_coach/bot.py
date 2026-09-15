@@ -24,12 +24,13 @@ import tempfile
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
-                           InlineKeyboardMarkup, Message)
+                           InlineKeyboardMarkup, LabeledPrice, Message,
+                           PreCheckoutQuery)
 
 import analysis
 import console          # noqa: F401  — правит вывод на Windows при импорте
@@ -37,6 +38,7 @@ import frame
 import limits
 import metrics
 import parser as export_parser
+import payments
 import report
 import storage
 import texts
@@ -57,6 +59,11 @@ import texts
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
 журнал = logging.getLogger("chat_coach")
+
+# Кому можно делать возвраты. Пусто — команда не работает ни у кого,
+# и это верное умолчание: возврат чужих денег не та вещь, которая должна
+# оказаться доступной по забывчивости.
+АДМИН = int(os.getenv("CHAT_COACH_ADMIN", "0") or 0)
 
 база = storage.База(os.getenv("CHAT_COACH_DB", "данные/бот.sqlite3"))
 диспетчер = Dispatcher(storage=MemoryStorage())
@@ -139,10 +146,28 @@ async def _убрать(сообщение):
 
 
 async def _остатки(user_id):
-    return tuple(
-        [await asyncio.to_thread(limits.осталось, база, user_id, вид)
-         for вид in (limits.РАЗБОР, limits.ВОПРОС, limits.ЧЕРНОВИК,
-                     limits.ПОДСКАЗКА)])
+    """Бесплатные остатки по всем видам и купленные разборы отдельно."""
+    бесплатно = [await asyncio.to_thread(limits.осталось, база, user_id, вид)
+                 for вид in (limits.РАЗБОР, limits.ВОПРОС, limits.ЧЕРНОВИК,
+                             limits.ПОДСКАЗКА)]
+    куплено = await asyncio.to_thread(база.остаток_купленного, user_id,
+                                      limits.РАЗБОР)
+    return tuple(бесплатно), куплено
+
+
+async def _текст_остатков(user_id):
+    бесплатно, куплено = await _остатки(user_id)
+    строки = [texts.ПОДСКАЗКА_ЛИМИТА % бесплатно]
+    # Строку про купленное показываем, только когда оно есть: «куплено: 0»
+    # никому ничего не сообщает, кроме того, что мы хотим денег.
+    if куплено:
+        строки.append(texts.КУПЛЕНО_ОСТАТОК % куплено)
+    return "\n".join(строки)
+
+
+def _витрина():
+    return _кнопки([(payments.цена_словами(payments.ПАКЕТЫ[код]),
+                     "купить:" + код) for код in payments.ПОРЯДОК])
 
 
 # --------------------------------------------------------------------------
@@ -169,8 +194,7 @@ async def помощь(сообщение: Message):
 
 @диспетчер.message(Command("лимит"))
 async def лимит(сообщение: Message):
-    await сообщение.answer(
-        texts.ПОДСКАЗКА_ЛИМИТА % await _остатки(сообщение.from_user.id))
+    await сообщение.answer(await _текст_остатков(сообщение.from_user.id))
 
 
 @диспетчер.message(Command("удалить"))
@@ -178,6 +202,125 @@ async def удалить(сообщение: Message, state: FSMContext):
     await state.clear()
     await asyncio.to_thread(база.забыть, сообщение.from_user.id)
     await сообщение.answer(texts.УДАЛЕНО)
+
+
+# --------------------------------------------------------------------------
+# Деньги
+# --------------------------------------------------------------------------
+#
+# Только звёзды, и это не выбор, а правило. В документации Bot API сказано
+# прямо: цифровые товары и услуги внутри Телеграма продаются исключительно
+# за Telegram Stars — «regardless of any other web portals, apps, services
+# or payment providers you may have set up outside the Telegram ecosystem».
+# Причина — правила App Store и Play Store, а следствие названо там же:
+# бота перестают показывать мобильным пользователям. Обойти это нечем,
+# включая схему «продать код на сайте, активировать в боте»: правило
+# написано ровно про такой обход.
+
+
+@диспетчер.message(Command("купить"))
+async def купить_команда(сообщение: Message):
+    await _послать(сообщение, texts.МАГАЗИН, кнопки=_витрина())
+
+
+@диспетчер.callback_query(F.data.startswith("премиум:"))
+async def премиум(запрос: CallbackQuery):
+    """Кнопка из упёршегося в лимит. Нажатие пишем: это шаг воронки."""
+    await запрос.answer()
+    откуда = запрос.data.split(":", 1)[1]
+    await asyncio.to_thread(база.хочет_премиум, запрос.from_user.id, откуда)
+    await _послать(запрос.message, texts.МАГАЗИН, кнопки=_витрина())
+
+
+@диспетчер.callback_query(F.data.startswith("купить:"))
+async def купить(запрос: CallbackQuery):
+    await запрос.answer()
+    пакет = payments.пакет_по_коду(запрос.data.split(":", 1)[1])
+    if пакет is None:
+        await _послать(запрос.message, texts.ПАКЕТ_ПРОПАЛ, кнопки=_витрина())
+        return
+    await запрос.message.answer_invoice(
+        title=пакет.подпись,
+        description=texts.ОПИСАНИЕ_ПАКЕТА % пакет.разборов,
+        payload=payments.в_payload(пакет),
+        # Для цифровых товаров токен провайдера пустой — так в документации.
+        provider_token="",
+        currency=payments.ВАЛЮТА_STARS,
+        prices=[LabeledPrice(label=пакет.подпись, amount=пакет.звёзд)])
+
+
+@диспетчер.pre_checkout_query()
+async def перед_оплатой(запрос: PreCheckoutQuery):
+    """Последняя возможность отказаться — и ответить надо за 10 секунд.
+
+    Поэтому здесь нет ни базы, ни сети: только разбор payload. Не успеем —
+    Телеграм отменит платёж, и человек увидит ошибку на ровном месте.
+    """
+    if payments.из_payload(запрос.invoice_payload) is None:
+        await запрос.answer(ok=False, error_message=texts.ПАКЕТ_ПРОПАЛ)
+        return
+    await запрос.answer(ok=True)
+
+
+@диспетчер.message(F.successful_payment)
+async def оплачено(сообщение: Message):
+    """Товар выдаём только здесь — так требует документация.
+
+    Повторный апдейт по тому же платежу — обычное дело, если бот не успел
+    ответить. Второй раз ничего не начислится (ключ — номер платежа),
+    но остаток показать надо: человек мог не увидеть первый ответ.
+    """
+    оплата = сообщение.successful_payment
+    user_id = сообщение.from_user.id
+    пакет, зачли = await asyncio.to_thread(payments.зачислить_звёзды, база,
+                                           user_id, оплата)
+    if пакет is None:
+        # Деньги взяты, а за что — непонятно. Молчать тут нельзя.
+        журнал.error("оплата с чужим payload %r, чек %s",
+                     оплата.invoice_payload, оплата.telegram_payment_charge_id)
+        await _послать(сообщение, texts.ОПЛАТА_НЕ_ПОНЯЛ)
+        return
+
+    журнал.info("оплата %s: пакет %s, %s %s, чек %s",
+                "зачтена" if зачли else "повторная", пакет.код,
+                оплата.total_amount, оплата.currency,
+                оплата.telegram_payment_charge_id)
+    await _послать(сообщение,
+                   texts.КУПЛЕНО % (пакет.подпись,
+                                    оплата.telegram_payment_charge_id))
+    await _послать(сообщение, await _текст_остатков(user_id))
+
+
+@диспетчер.message(Command("возврат"))
+async def возврат(сообщение: Message, command: CommandObject):
+    """Вернуть звёзды по номеру платежа. Только для своего человека.
+
+    Порядок важен: сначала деньги уходят обратно, и только потом снимаем
+    начисленное. Наоборот — значит при сбое у Телеграма забрать купленное,
+    денег не вернув.
+    """
+    if not АДМИН or сообщение.from_user.id != АДМИН:
+        return          # молча: обычному человеку такой команды и не видно
+    чек = (command.args or "").strip()
+    if not чек:
+        await _послать(сообщение, texts.ВОЗВРАТ_КАК)
+        return
+
+    кому, пакет = await asyncio.to_thread(payments.платёж_для_возврата,
+                                          база, чек)
+    if кому is None:
+        await _послать(сообщение, texts.ВОЗВРАТ_НЕ_НАЙДЕН)
+        return
+    try:
+        await сообщение.bot.refund_star_payment(
+            user_id=кому, telegram_payment_charge_id=чек)
+    except Exception as сбой:                      # noqa: BLE001
+        журнал.warning("возврат не прошёл: %s", сбой)
+        await _послать(сообщение, texts.ВОЗВРАТ_НЕ_ВЫШЕЛ % сбой)
+        return
+    await asyncio.to_thread(payments.отметить_возврат, база, чек, пакет)
+    журнал.info("возврат: чек %s, человек %s", чек, кому)
+    await _послать(сообщение, texts.ВОЗВРАТ_СДЕЛАН % (пакет.подпись, кому))
 
 
 # --------------------------------------------------------------------------
@@ -352,8 +495,9 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
     код = запрос.data.split(":", 1)[1]
     цель = texts.ЦЕЛИ.get(код, "разобраться, что я делаю не так")
 
-    можно = await asyncio.to_thread(limits.потратить, база, user_id, limits.РАЗБОР)
-    if not можно:
+    откуда = await asyncio.to_thread(limits.потратить, база, user_id,
+                                     limits.РАЗБОР)
+    if not откуда:
         await _послать(запрос.message,
                        texts.ЛИМИТ % limits.текст_лимита(limits.РАЗБОР),
                        кнопки=_кнопки([("Хочу премиум", "премиум:разборы")]))
@@ -365,7 +509,8 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
     try:
         итог = await asyncio.to_thread(metrics.analyse, сообщения, я, она)
     except ValueError as сбой:
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР)
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР,
+                                откуда)
         await _послать(запрос.message, texts.ОШИБКА % сбой)
         return
 
@@ -386,7 +531,8 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
         # Отказ найден питоном, до всякой модели. Звать её незачем: любой
         # совет был бы про то, как обойти чужое «нет», а он всё равно не
         # будет показан. Деньги не тратим, попытку возвращаем.
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР)
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР,
+                                откуда)
         await _послать(запрос.message, texts.СТОП_БЕЗ_ИИ)
         return
 
@@ -396,7 +542,8 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
             analysis.разобрать, None, итог, цель, отобранное=отобранное,
             рамка=рамка)
     except analysis.ОшибкаРазбора as сбой:
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР)
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.РАЗБОР,
+                                откуда)
         await _убрать(думаю)
         await _послать(запрос.message, texts.ОШИБКА % сбой)
         return
@@ -422,8 +569,9 @@ async def вопрос(сообщение: Message, state: FSMContext):
         return
 
     user_id = сообщение.from_user.id
-    можно = await asyncio.to_thread(limits.потратить, база, user_id, limits.ВОПРОС)
-    if not можно:
+    откуда = await asyncio.to_thread(limits.потратить, база, user_id,
+                                     limits.ВОПРОС)
+    if not откуда:
         await _послать(сообщение, texts.ЛИМИТ % limits.текст_лимита(limits.ВОПРОС),
                        кнопки=_кнопки([("Хочу премиум", "премиум:вопросы")]))
         return
@@ -435,7 +583,8 @@ async def вопрос(сообщение: Message, state: FSMContext):
             analysis.спросить, данные["итог"], данные["отобранное"],
             сообщение.text, рамка=данные.get("рамка"))
     except analysis.ОшибкаРазбора as сбой:
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ВОПРОС)
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ВОПРОС,
+                                откуда)
         await _убрать(думаю)
         await _послать(сообщение, texts.ОШИБКА % сбой)
         return
@@ -475,9 +624,9 @@ async def _подсказать(сообщение, state, user_id):
             кнопки=КНОПКИ_ПОСЛЕ_РАЗБОРА)
         return
 
-    можно = await asyncio.to_thread(limits.потратить, база, user_id,
-                                    limits.ПОДСКАЗКА)
-    if not можно:
+    откуда = await asyncio.to_thread(limits.потратить, база, user_id,
+                                     limits.ПОДСКАЗКА)
+    if not откуда:
         await _послать(сообщение,
                        texts.ЛИМИТ % limits.текст_лимита(limits.ПОДСКАЗКА),
                        кнопки=_кнопки([("Хочу премиум", "премиум:подсказки")]))
@@ -490,7 +639,8 @@ async def _подсказать(сообщение, state, user_id):
             данные.get("цель", "разобраться, что я делаю не так"),
             metrics.ступень(итог), ход, рамка)
     except analysis.ОшибкаРазбора as сбой:
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ПОДСКАЗКА)
+        await asyncio.to_thread(limits.вернуть, база, user_id,
+                                limits.ПОДСКАЗКА, откуда)
         await _убрать(думаю)
         await _послать(сообщение, texts.ОШИБКА % сбой)
         return
@@ -562,9 +712,9 @@ async def черновик_текст(сообщение: Message, state: FSMCon
         return
 
     user_id = сообщение.from_user.id
-    можно = await asyncio.to_thread(limits.потратить, база, user_id,
-                                    limits.ЧЕРНОВИК)
-    if not можно:
+    откуда = await asyncio.to_thread(limits.потратить, база, user_id,
+                                     limits.ЧЕРНОВИК)
+    if not откуда:
         await _послать(сообщение,
                        texts.ЛИМИТ % limits.текст_лимита(limits.ЧЕРНОВИК),
                        кнопки=_кнопки([("Хочу премиум", "премиум:черновики")]))
@@ -577,7 +727,8 @@ async def черновик_текст(сообщение: Message, state: FSMCon
             analysis.черновик, данные["итог"], данные["отобранное"], текст,
             данные.get("рамка"))
     except analysis.ОшибкаРазбора as сбой:
-        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ЧЕРНОВИК)
+        await asyncio.to_thread(limits.вернуть, база, user_id, limits.ЧЕРНОВИК,
+                                откуда)
         await _убрать(думаю)
         await _послать(сообщение, texts.ОШИБКА % сбой)
         return
@@ -605,14 +756,6 @@ async def текст_без_разбора(сообщение: Message, state: F
         await _принять(сообщение, state, сообщения, вставка=True, явная=явная)
         return
     await _послать(сообщение, texts.НЕТ_РАЗБОРА, кнопки=НАЧАЛЬНЫЕ_КНОПКИ)
-
-
-@диспетчер.callback_query(F.data.startswith("премиум:"))
-async def премиум(запрос: CallbackQuery):
-    await запрос.answer()
-    откуда = запрос.data.split(":", 1)[1]
-    await asyncio.to_thread(база.хочет_премиум, запрос.from_user.id, откуда)
-    await запрос.message.answer(texts.ПРЕМИУМ_ЗАПИСАН)
 
 
 # --------------------------------------------------------------------------

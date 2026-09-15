@@ -50,6 +50,35 @@ CREATE TABLE IF NOT EXISTS premium_interest (
     created_at  TEXT    NOT NULL,
     source      TEXT
 );
+
+-- Купленное: остаток по каждому виду. Не сгорает по календарю — человек
+-- заплатил за штуки, а не за неделю.
+CREATE TABLE IF NOT EXISTS credits (
+    user_id INTEGER NOT NULL,
+    kind    TEXT    NOT NULL,
+    amount  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, kind)
+);
+
+-- Платежи. provider держим отдельной колонкой, хотя провайдер пока один:
+-- вторым однажды встанет платёжка для веб-версии, и переделывать схему
+-- ради этого не придётся.
+--
+-- UNIQUE(provider, external_id) — здесь вся идемпотентность. Телеграм
+-- повторяет апдейт, если бот не ответил вовремя, и без этого ограничения
+-- один платёж зачислялся бы дважды.
+CREATE TABLE IF NOT EXISTS payments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    provider    TEXT    NOT NULL,
+    external_id TEXT    NOT NULL,
+    package     TEXT    NOT NULL,
+    price       INTEGER NOT NULL,
+    currency    TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL,
+    refunded_at TEXT,
+    UNIQUE (provider, external_id)
+);
 """
 
 # Что из разбора вообще можно положить в базу. Список закрытый — и это
@@ -172,6 +201,100 @@ class База:
                 (user_id, сколько)).fetchall()
         return [dict(строка) for строка in строки]
 
+    # ------------------------------------------------------------ деньги
+
+    def зачислить(self, user_id, провайдер, внешний_id, пакет, цена, валюта,
+                  сколько):
+        """Кладёт купленное на счёт. False — этот платёж уже зачтён.
+
+        Повторный апдейт от Телеграма — обычное дело, а не сбой: он шлёт
+        его снова, пока бот не ответит. Поэтому вся защита от двойного
+        начисления держится на UNIQUE(provider, external_id), и обе записи
+        идут одной транзакцией: не легло в payments — не легло и на счёт.
+
+        «сколько» — {вид: штук}: сколько чего кладём. Что именно входит
+        в пакет, знает payments.py, а не хранилище.
+        """
+        сейчас = datetime.now().isoformat(timespec="seconds")
+        with self._соединение() as соединение:
+            курсор = соединение.execute(
+                "INSERT OR IGNORE INTO payments(user_id, provider, external_id,"
+                " package, price, currency, created_at) VALUES(?,?,?,?,?,?,?)",
+                (user_id, провайдер, внешний_id, пакет, цена, валюта, сейчас))
+            if not курсор.rowcount:
+                return False
+            for вид, штук in сколько.items():
+                соединение.execute(
+                    "INSERT INTO credits(user_id, kind, amount) VALUES(?,?,?) "
+                    "ON CONFLICT(user_id, kind) DO UPDATE SET "
+                    "amount = amount + excluded.amount",
+                    (user_id, вид, штук))
+        return True
+
+    def остаток_купленного(self, user_id, вид):
+        with self._соединение() as соединение:
+            строка = соединение.execute(
+                "SELECT amount FROM credits WHERE user_id=? AND kind=?",
+                (user_id, вид)).fetchone()
+        return строка["amount"] if строка else 0
+
+    def потратить_купленное(self, user_id, вид):
+        """Списывает одну купленную штуку. True, если она была.
+
+        Проверка и списание одним запросом — тем же приёмом, что и квоты:
+        иначе два сообщения подряд успевают списать один и тот же остаток.
+        """
+        with self._соединение() as соединение:
+            курсор = соединение.execute(
+                "UPDATE credits SET amount = amount - 1 "
+                "WHERE user_id=? AND kind=? AND amount > 0", (user_id, вид))
+            return курсор.rowcount > 0
+
+    def вернуть_купленное(self, user_id, вид):
+        """Кладёт штуку обратно, если работа сорвалась не по вине человека.
+
+        Без WHERE-совпадения строки ничего не произойдёт — и правильно:
+        возвращаем только то, что раньше отсюда и взяли.
+        """
+        with self._соединение() as соединение:
+            соединение.execute(
+                "UPDATE credits SET amount = amount + 1 "
+                "WHERE user_id=? AND kind=?", (user_id, вид))
+
+    def найти_платёж(self, провайдер, внешний_id):
+        with self._соединение() as соединение:
+            строка = соединение.execute(
+                "SELECT * FROM payments WHERE provider=? AND external_id=?",
+                (провайдер, внешний_id)).fetchone()
+        return dict(строка) if строка else None
+
+    def пометить_возврат(self, провайдер, внешний_id, сколько):
+        """Отмечает возврат и снимает начисленное.
+
+        False — платежа нет или он уже возвращён.
+        """
+        сейчас = datetime.now().isoformat(timespec="seconds")
+        with self._соединение() as соединение:
+            строка = соединение.execute(
+                "SELECT user_id, refunded_at FROM payments "
+                "WHERE provider=? AND external_id=?",
+                (провайдер, внешний_id)).fetchone()
+            if строка is None or строка["refunded_at"]:
+                return False
+            соединение.execute(
+                "UPDATE payments SET refunded_at=? "
+                "WHERE provider=? AND external_id=?",
+                (сейчас, провайдер, внешний_id))
+            for вид, штук in сколько.items():
+                # MAX(...,0): купленное могло быть уже потрачено, и уводить
+                # остаток в минус нельзя — человек не должен уйти в долг
+                # за то, за что заплатил и чем успел воспользоваться.
+                соединение.execute(
+                    "UPDATE credits SET amount = MAX(amount - ?, 0) "
+                    "WHERE user_id=? AND kind=?",
+                    (штук, строка["user_id"], вид))
+        return True
+
     # ------------------------------------------------------------- премиум
 
     def хочет_премиум(self, user_id, откуда=""):
@@ -192,8 +315,17 @@ class База:
     # -------------------------------------------------------------- забыть
 
     def забыть(self, user_id):
-        """Стирает всё про человека по команде /удалить."""
+        """Стирает всё про человека по команде /удалить.
+
+        Платежи не удаляются, а обезличиваются. Без строки платежа нельзя
+        вернуть деньги, и обещание «сотру всё» не должно на деле означать
+        «и возврат теперь невозможен». Купленные разборы при этом сгорают
+        вместе с остальным — об этом сказано прямо в тексте команды.
+        """
         with self._соединение() as соединение:
-            for таблица in ("usage", "reports", "premium_interest", "users"):
+            for таблица in ("usage", "reports", "premium_interest", "credits",
+                            "users"):
                 соединение.execute(
                     "DELETE FROM %s WHERE user_id=?" % таблица, (user_id,))
+            соединение.execute(
+                "UPDATE payments SET user_id=0 WHERE user_id=?", (user_id,))
