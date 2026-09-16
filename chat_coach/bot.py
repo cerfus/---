@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import tempfile
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
@@ -29,9 +30,9 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import (BotCommand, CallbackQuery, InlineKeyboardButton,
-                           InlineKeyboardMarkup, LabeledPrice, Message,
-                           PreCheckoutQuery)
+from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery,
+                           InlineKeyboardButton, InlineKeyboardMarkup,
+                           LabeledPrice, Message, PreCheckoutQuery)
 
 # settings идёт первым намеренно: он подхватывает .env при импорте,
 # а analysis читает переменные окружения уже на своём.
@@ -378,6 +379,54 @@ async def возврат(сообщение: Message, command: CommandObject):
     await _послать(сообщение, texts.ВОЗВРАТ_СДЕЛАН % (пакет.подпись, кому))
 
 
+@диспетчер.message(Command(*texts.КОМАНДА_ЭКСПЕРТА))
+async def эксперт(сообщение: Message, state: FSMContext):
+    """Пакет для второго мнения — файлом. Только для своего человека.
+
+    Внутри две части: ровно то, что ушло в модель, и всё посчитанное, что
+    в запрос не попало. Вторая часть и есть смысл команды: когда бот судит
+    неверно, ответ почти всегда в том, из чего сложился индекс, а увидеть
+    это до сих пор было нельзя никак.
+
+    Файлом, а не блоками: пакет не влезает в предел сообщения, и резать
+    его пришлось бы на три-четыре куска — столько же раз копировать.
+    На диск он при этом не ложится: собирается в памяти и уходит, правило
+    «текст переписки никуда не сохраняется» остаётся целым.
+    """
+    if not АДМИН or сообщение.from_user.id != АДМИН:
+        return          # молча: обычному человеку такой команды и не видно
+    данные = await state.get_data()
+    итог, отобранное = данные.get("итог"), данные.get("отобранное")
+    if not итог or not отобранное:
+        await _послать(сообщение, texts.ЭКСПЕРТ_БЕЗ_РАЗБОРА)
+        return
+
+    рамка = данные.get("рамка")
+    # Тот же сборщик, что зовёт разбор: пакет обязан показывать настоящий
+    # запрос, а не его пересказ, — иначе искать в нём ошибку бессмысленно.
+    запрос = await asyncio.to_thread(analysis.собрать_запрос, итог,
+                                     отобранное, данные.get("цель") or "—",
+                                     рамка)
+    посчитанное = await asyncio.to_thread(report.для_эксперта, итог, рамка,
+                                          данные.get("недели"))
+    сейчас = datetime.now()
+    пакет = "\n\n".join([
+        texts.ШАПКА_ПАКЕТА % сейчас.strftime("%d.%m.%Y %H:%M"),
+        texts.ЗАГОЛОВОК_ЗАПРОСА, запрос,
+        texts.ЗАГОЛОВОК_СЧИТАННОГО, посчитанное])
+
+    что_за = frame.НАЗВАНИЯ.get((рамка or {}).get("тип"), "переписка")
+    подпись = texts.ЭКСПЕРТ_ГОТОВ % (
+        что_за, len(пакет),
+        metrics.склонение(len(пакет), "знак", "знака", "знаков"))
+    журнал.info("пакет для второго мнения: %d знаков", len(пакет))
+    await сообщение.answer_document(
+        BufferedInputFile(пакет.encode("utf-8"),
+                          filename="эксперт-%s.txt"
+                                   % сейчас.strftime("%Y-%m-%d")),
+        caption=html.escape(подпись))
+
+
 # --------------------------------------------------------------------------
 # Приём файла
 # --------------------------------------------------------------------------
@@ -579,7 +628,7 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
     # Цель кладём рядом: подсказка «что написать сейчас» вся про неё,
     # а жила цель до сих пор только внутри этого обработчика.
     await state.update_data(сообщения=None, итог=итог, отобранное=отобранное,
-                            рамка=рамка, цель=цель)
+                            рамка=рамка, цель=цель, недели=недели)
     await asyncio.to_thread(база.записать_отчёт, user_id, итог)
     await state.set_state(Шаги.готово)
 
