@@ -299,3 +299,104 @@ textarea:focus, input:focus { outline: 2px solid var(--полоска); outline-
   .фактор-число { text-align: left; }
   .hero { font-size: 48px; }
 }
+
+/* --------------------------------------------------------------------------
+   Что видно, линии по неделям, пороги
+   -------------------------------------------------------------------------- */
+
+/* Наблюдения стоят первыми и читаются как фразы, а не как таблица. */
+.список.факты li {
+  margin-bottom: .35rem;
+  color: var(--текст);
+}
+
+#куда { position: relative; }
+
+.график { margin: 0 0 1.1rem; }
+
+.график figcaption {
+  font-size: .82rem;
+  color: var(--текст-тихий);
+  margin-bottom: .2rem;
+}
+
+.холст svg { width: 100%; height: auto; display: block; }
+
+/* Тонкая линия и приглушённая ось: громкие блоки тут ни к чему. */
+.линия {
+  fill: none;
+  stroke: var(--полоска);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ось {
+  stroke: var(--край);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Кольцо цветом поверхности, а не обводка: так точка не сливается с линией. */
+.конец {
+  fill: var(--полоска);
+  stroke: var(--фон-карточки);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.подпись-конца {
+  fill: var(--текст-второй);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.подпись-даты {
+  fill: var(--текст-тихий);
+  font-size: 11px;
+}
+
+.прицел {
+  stroke: var(--текст-тихий);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.всплывашка {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: .25rem .5rem;
+  background: var(--фон-карточки);
+  border: 1px solid var(--край);
+  border-radius: 6px;
+  box-shadow: var(--тень);
+  font-size: .8rem;
+  color: var(--текст-второй);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Ответ подсказки и черновика: готовый текст с абзацами, как его прислал
+   сервер. Придержанный ответ отличается тоном, а не восклицанием. */
+.ответ {
+  margin-top: .8rem;
+  padding: .8rem 1rem;
+  background: var(--фон);
+  border: 1px solid var(--край);
+  border-radius: 10px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.ответ.придержано {
+  color: var(--текст-второй);
+  border-style: dashed;
+}
+
+#черновик-ввод { margin-top: .7rem; }
+
+#черновик-ввод textarea {
+  width: 100%;
+  margin-bottom: .5rem;
+}
