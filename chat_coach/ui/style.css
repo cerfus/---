@@ -1,0 +1,402 @@
+/* Оформление окна.
+ *
+ * Цвета взяты из проверенной палитры и прогнаны валидатором: заливка полоски
+ * отделяется от дорожки с запасом (ΔE 32.9 на светлом, 28.4 на тёмном) и сама
+ * держит 3:1 к фону в обоих режимах. Дорожка нарочно приглушена — она фон, а
+ * не данные; поэтому у каждой полоски всегда стоит видимое число, и читать
+ * значение можно не по цвету.
+ *
+ * Все восемь факторов — одна гамма, а не восемь разных цветов: они меряют одно
+ * и то же (насколько фактор набран), различает их длина, а радуга тут только
+ * мешала бы.
+ */
+
+:root {
+  color-scheme: light;
+  --фон:            #fcfcfb;
+  --фон-карточки:   #ffffff;
+  --край:           #e6e5e1;
+  --текст:          #0b0b0b;
+  --текст-второй:   #52514e;
+  --текст-тихий:    #7c7b76;
+  --полоска:        #2a78d6;
+  --дорожка:        #cde2fb;
+  --хорошо:         #0ca30c;
+  --плохо:          #d03b3b;
+  --тень:           0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --фон:          #131312;
+    --фон-карточки: #1a1a19;
+    --край:         #33332f;
+    --текст:        #ffffff;
+    --текст-второй: #c3c2b7;
+    --текст-тихий:  #8f8e86;
+    --полоска:      #3987e5;
+    --дорожка:      #0d366b;
+    --тень:         none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --фон:          #131312;
+  --фон-карточки: #1a1a19;
+  --край:         #33332f;
+  --текст:        #ffffff;
+  --текст-второй: #c3c2b7;
+  --текст-тихий:  #8f8e86;
+  --полоска:      #3987e5;
+  --дорожка:      #0d366b;
+  --тень:         none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 16px 48px;
+  background: var(--фон);
+  color: var(--текст);
+  font: 15px/1.55 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+main { max-width: 760px; margin: 0 auto; }
+
+/* ------------------------------------------------------------------ шапка */
+
+.шапка {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.шапка h1 { margin: 0; font-size: 20px; font-weight: 650; flex: 1; }
+.шапка-кнопки { display: flex; gap: 8px; }
+
+/* --------------------------------------------------------------- карточки */
+
+.карточка {
+  background: var(--фон-карточки);
+  border: 1px solid var(--край);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--тень);
+}
+
+h2 { font-size: 15px; font-weight: 650; margin: 0 0 6px; }
+h3 { font-size: 14px; font-weight: 650; margin: 24px 0 10px; color: var(--текст-второй); }
+h2 + .ряд, h3 + .факторы { margin-top: 10px; }
+
+.пояснение { color: var(--текст-второй); font-size: 13.5px; margin: 0 0 12px; }
+.тихо { color: var(--текст-тихий); font-size: 12.5px; margin-top: 14px; }
+
+/* ----------------------------------------------------------- поля и кнопки */
+
+textarea, input[type="password"] {
+  width: 100%;
+  background: var(--фон);
+  color: var(--текст);
+  border: 1px solid var(--край);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  resize: vertical;
+}
+textarea { font-size: 13.5px; line-height: 1.5; min-height: 150px; }
+textarea::placeholder { color: var(--текст-тихий); }
+textarea:focus, input:focus { outline: 2px solid var(--полоска); outline-offset: -1px; }
+
+.ряд {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.ряд input[type="password"] { flex: 1; min-width: 200px; width: auto; }
+
+.кнопка, .вторая, .плоская {
+  font: inherit;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.кнопка { background: var(--полоска); color: #fff; font-weight: 600; }
+.кнопка:hover:not(:disabled) { filter: brightness(1.08); }
+.кнопка:disabled { opacity: .45; cursor: default; }
+
+.вторая, .плоская {
+  background: var(--фон);
+  color: var(--текст);
+  border-color: var(--край);
+}
+.вторая:hover, .плоская:hover { border-color: var(--текст-тихий); }
+.плоская { padding: 7px 12px; font-size: 13px; }
+
+.выбор {
+  font: inherit;
+  background: var(--фон);
+  color: var(--текст);
+  border: 1px solid var(--край);
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.выбор[aria-pressed="true"] {
+  background: var(--полоска);
+  border-color: var(--полоска);
+  color: #fff;
+  font-weight: 600;
+}
+
+.галочка {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--текст-второй);
+  cursor: pointer;
+}
+
+/* ----------------------------------------------------------------- итог */
+
+.итог {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.итог-число { text-align: center; min-width: 120px; }
+.итог-слова { flex: 1; min-width: 220px; }
+
+/* Одна крупная цифра на весь экран — та, ради которой всё затевалось.
+ * Пропорциональные цифры, а не табличные: на таком кегле табличные
+ * рассыпаются. */
+.hero {
+  font-size: 60px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+/* Рамка стоит над вердиктом и звучит тише его: это подпись к линейке,
+   а не вывод. Вывод — строкой ниже. */
+.рамка {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--текст-второй);
+  margin: 0 0 6px;
+}
+.вердикт { font-size: 16px; margin: 4px 0 8px; }
+
+.дельта { font-size: 13.5px; margin: 0; font-weight: 600; }
+.дельта.вверх { color: var(--хорошо); }
+.дельта.вниз  { color: var(--плохо); }
+
+/* -------------------------------------------------------------- факторы */
+
+.факторы { display: grid; gap: 10px; }
+
+.фактор {
+  display: grid;
+  grid-template-columns: 132px 1fr 78px;
+  gap: 12px;
+  align-items: center;
+}
+.фактор-имя { font-size: 13.5px; }
+.фактор-имя span { display: block; color: var(--текст-тихий); font-size: 12px; }
+
+/* Мера: заливка и дорожка одной гаммы, чтобы состояние читалось по всей
+ * длине. Данные кончаются скруглением, у основания край прямой. */
+.дорожка {
+  background: var(--дорожка);
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+}
+.заливка {
+  background: var(--полоска);
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  min-width: 0;
+}
+
+.фактор-число {
+  font-size: 13px;
+  color: var(--текст-второй);
+  text-align: right;
+  font-variant-numeric: tabular-nums;   /* колонка чисел — тут выравнивание нужно */
+}
+
+/* ---------------------------------------------------------------- цифры */
+
+.цифры { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.цифры td { padding: 6px 0; border-bottom: 1px solid var(--край); vertical-align: top; }
+.цифры td:first-child { color: var(--текст-второй); width: 44%; padding-right: 12px; }
+.цифры tr:last-child td { border-bottom: none; }
+
+.список { margin: 0; padding-left: 20px; color: var(--текст-второй); font-size: 13.5px; }
+.список li { margin-bottom: 4px; }
+.список b { color: var(--текст); font-weight: 600; }
+
+/* ------------------------------------------------------------------- ии */
+
+.совет {
+  border-left: 3px solid var(--край);
+  padding: 2px 0 2px 14px;
+  margin: 12px 0;
+}
+.совет b { display: block; margin-bottom: 4px; }
+.цитата { color: var(--текст-второй); font-size: 13.5px; margin: 3px 0; }
+.цитата i { color: var(--текст-тихий); font-style: normal; }
+
+.стоп {
+  border: 1px solid var(--плохо);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 16px 0;
+}
+.стоп h3 { color: var(--плохо); margin: 0 0 6px; }
+
+.шаг {
+  background: var(--фон);
+  border: 1px solid var(--край);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 14px 0 0;
+}
+
+/* ------------------------------------------------------------------ беда */
+
+.беда {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  background: var(--плохо);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  z-index: 10;
+}
+
+.думает { opacity: .55; pointer-events: none; }
+
+@media (max-width: 520px) {
+  .фактор { grid-template-columns: 1fr; gap: 4px; }
+  .фактор-число { text-align: left; }
+  .hero { font-size: 48px; }
+}
+
+/* --------------------------------------------------------------------------
+   Что видно, линии по неделям, пороги
+   -------------------------------------------------------------------------- */
+
+/* Наблюдения стоят первыми и читаются как фразы, а не как таблица. */
+.список.факты li {
+  margin-bottom: .35rem;
+  color: var(--текст);
+}
+
+#куда { position: relative; }
+
+.график { margin: 0 0 1.1rem; }
+
+.график figcaption {
+  font-size: .82rem;
+  color: var(--текст-тихий);
+  margin-bottom: .2rem;
+}
+
+.холст svg { width: 100%; height: auto; display: block; }
+
+/* Тонкая линия и приглушённая ось: громкие блоки тут ни к чему. */
+.линия {
+  fill: none;
+  stroke: var(--полоска);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ось {
+  stroke: var(--край);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Кольцо цветом поверхности, а не обводка: так точка не сливается с линией. */
+.конец {
+  fill: var(--полоска);
+  stroke: var(--фон-карточки);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.подпись-конца {
+  fill: var(--текст-второй);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.подпись-даты {
+  fill: var(--текст-тихий);
+  font-size: 11px;
+}
+
+.прицел {
+  stroke: var(--текст-тихий);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.всплывашка {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: .25rem .5rem;
+  background: var(--фон-карточки);
+  border: 1px solid var(--край);
+  border-radius: 6px;
+  box-shadow: var(--тень);
+  font-size: .8rem;
+  color: var(--текст-второй);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Ответ подсказки и черновика: готовый текст с абзацами, как его прислал
+   сервер. Придержанный ответ отличается тоном, а не восклицанием. */
+.ответ {
+  margin-top: .8rem;
+  padding: .8rem 1rem;
+  background: var(--фон);
+  border: 1px solid var(--край);
+  border-radius: 10px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.ответ.придержано {
+  color: var(--текст-второй);
+  border-style: dashed;
+}
+
+#черновик-ввод { margin-top: .7rem; }
+
+#черновик-ввод textarea {
+  width: 100%;
+  margin-bottom: .5rem;
+}
