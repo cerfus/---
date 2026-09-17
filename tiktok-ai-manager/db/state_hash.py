@@ -19,7 +19,10 @@ SPEC = {
     "accounts": ("platform, handle", {"account_id", "created_at"}),
     "videos": ("video_id", {"account_id"}),
     "video_snapshots": ("video_id, source, observed_at", {"snapshot_id"}),
-    "video_features": ("video_id", set()),
+    # идентичность признака — (video_id, feature_name, policy_version);
+    # computed_at и run_id в неё не входят и исключены из слепка
+    "video_features": ("video_id, feature_name, policy_version",
+                       {"id", "computed_at", "run_id"}),
     "video_analysis": ("video_id, field_name, rubric_version, analyst", {"analysis_id"}),
     "dna_versions": ("account_id, version", {"dna_version_id", "account_id"}),
     "content_patterns": ("account_id, dimension, pattern_key, metric, computed_at",

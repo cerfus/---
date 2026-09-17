@@ -1,9 +1,13 @@
 {
   "db_persistence": {
-    "blocked": true,
-    "consequence": "пересчёт под новой policy_version затёр бы прошлый результат",
-    "decision_required": "владелец выбирает вариант хранилища",
-    "reason": "video_features: PRIMARY KEY (video_id) без версии + UPDATE у рантайма"
+    "append_only": true,
+    "identity": [
+      "video_id",
+      "feature_name",
+      "policy_version"
+    ],
+    "migration": "0009_video_features_versioned.sql",
+    "table": "video_features"
   },
   "engine_version": "feature-engine-1.0.0",
   "feature_hash": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",

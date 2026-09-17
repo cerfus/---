@@ -31,8 +31,8 @@ A1=$(python3 analytics/run.py --load | grep analytics_hash | awk '{print $2}')
 A2=$(python3 analytics/run.py | grep analytics_hash | awk '{print $2}')
 [ "$A1" = "$A2" ] && echo "  ANALYTICS DETERMINISM: PASS ${A1:0:24}…" || { echo "  FAIL"; exit 1; }
 
-echo; echo "=== 6. слой признаков (JSONL, запись в БД заблокирована) ==="
-F1=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
+echo; echo "=== 6. слой признаков (JSONL + PostgreSQL) ==="
+F1=$(python3 features/run.py --load | grep feature_hash: | awk '{print $2}')
 F2=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
 [ "$F1" = "$F2" ] && echo "  FEATURE DETERMINISM: PASS ${F1:0:24}…" || { echo "  FAIL"; exit 1; }
 
@@ -41,6 +41,8 @@ echo; echo "=== 8. тесты Phase 2 (движок сверки) ==="; python3 
 echo; echo "=== 9. тесты Phase 3 (аналитика) ==="; python3 tests/test_analytics.py | tail -2
 
 echo; echo "=== 11. тесты Phase 4 (признаки) ==="; python3 tests/test_features.py | tail -2
+
+echo; echo "=== 11б. тесты хранилища признаков ==="; python3 tests/test_feature_storage.py | tail -2
 
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
