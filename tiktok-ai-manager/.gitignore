@@ -1,10 +1,12 @@
-!.env.example
+__pycache__/
 *.pyc
 *.session
-.env
-.env.*
-__pycache__/
-config/settings.toml
+logs/
 data/media/
 db/*.db
-logs/
+config/settings.toml
+
+# секреты: отрицание ДОЛЖНО идти после правил, которые оно отменяет
+.env
+.env.*
+!.env.example

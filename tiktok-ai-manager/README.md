@@ -38,6 +38,26 @@ git clone https://github.com/cerfus/tiktok-ai-manager
 Требуется установленный Git для Windows и Python 3.11+.
 Проверить: `git --version` и `python --version`.
 
+## Phase 1: база и пересборка
+
+Требуется PostgreSQL 16 (SQLite не поддерживается).
+
+```bash
+bash scripts/bootstrap_db.sh        # БД, три роли, .env с правами 600
+python3 db/migrate.py               # миграции от имени владельца схемы
+python3 normalize/normalize.py      # raw -> JSONL (источник истины)
+python3 db/load.py                  # JSONL -> PostgreSQL
+bash scripts/verify_all.sh          # пересборка с нуля + все тесты
+```
+
+**PostgreSQL источником истины не является.** База пересобирается из
+`data/*.jsonl` командой `scripts/rebuild_from_jsonl.sh`, и слепок состояния
+после пересборки обязан совпасть побайтово.
+
+Роли: `tiktok_owner` владеет схемой, `tiktok_rw` работает в рантайме без
+UPDATE и DELETE на append-only таблицах, `tiktok_ro` только читает.
+Пароли генерируются при бутстрапе и живут в `.env`, который в git не попадает.
+
 ## Запуск
 
 ```bash
