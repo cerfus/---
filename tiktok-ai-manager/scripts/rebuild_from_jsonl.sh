@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Пересборка БД с нуля ИСКЛЮЧИТЕЛЬНО из JSONL.
 # Роли и .env не трогаются: пересоздаётся только база.
+bash "$(dirname "$0")/ensure_pg.sh" >/dev/null
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DB="${TIKTOK_DB:-tiktok_manager}"

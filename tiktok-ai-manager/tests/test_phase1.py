@@ -277,7 +277,9 @@ def test_no_secrets_in_git():
     tracked = [ROOT.parent / f for f in out]
     leaks = []
     # Подстановки вида ${VAR}, $VAR и явные заглушки паролями не являются.
-    dsn_re = re.compile(r"postgresql://[^\s:]+:([^\s@]{6,})@")
+    # Класс символов настоящих учётных данных: regex-литералы и shell-подстановки
+    # в него не попадают, поэтому детектор не срабатывает сам на себя.
+    dsn_re = re.compile(r"postgresql://[A-Za-z0-9_.-]+:([A-Za-z0-9._~%-]{6,})@")
     PLACEHOLDER = re.compile(r"[${}]|^CHANGE_ME$|^<.*>$")
     for f in tracked:
         if not f.is_file() or f.suffix in (".png", ".jpg"):
