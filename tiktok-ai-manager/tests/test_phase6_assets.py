@@ -26,6 +26,7 @@ from assets import run as assets_run
 from core import config
 from features import visual_engine as E
 from features import visual_policies as V
+from assets import ingest as ING
 from features import visual_run as VR
 
 RESULTS = []
@@ -724,6 +725,151 @@ def test_L_publishing_disabled():
         check(f"L5 слой Phase 6 не обращается к {bad}", bad not in src)
 
 
+# ══════════════════════════════════════════════════════════════════════ M
+def test_M_local_ingestion_workflow():
+    """M. Однокомандный локальный ингест: от файла до покрытия.
+
+    Прогон идёт в ИЗОЛИРОВАННОМ каталоге: настоящие data/assets и
+    data/features_tier1 не трогаются. Иначе тест оставил бы в append-only
+    манифесте строку про синтетический ролик, и отчёт перестал бы описывать
+    реальность.
+    """
+    print("\nM — локальный ингест одной командой")
+    videos = assets_run.load_videos()
+    real_id = sorted(v["video_id"] for v in videos)[0]
+
+    if not HAVE_TOOLING:
+        check("M1 без инструментов промера ингест всё равно отрабатывает",
+              ING.run(load=False, verbose=False)["coverage"]
+              ["video_asset_status"] == "UNAVAILABLE")
+        return
+
+    sandbox = Path(tempfile.mkdtemp(prefix="phase6_ingest_"))
+    inc = sandbox / "incoming"
+    inc.mkdir(parents=True)
+    # настоящий видеофайл под именем настоящего video_id
+    (inc / f"{real_id}.mp4").write_bytes(FIXTURES["two_shots.mp4"].read_bytes())
+    # и три файла, которые ингест обязан отвергнуть громко, а не молча
+    (inc / "9999999999999999999.mp4").write_bytes(b"x" * 10)     # чужой id
+    (inc / f"{real_id}.txt").write_text("не видео")              # не то расширение
+    (inc / ".gitkeep").write_text("служебный")
+
+    saved = (assets_run.OUT, assets_run.INCOMING, assets_run.MANIFEST,
+             VR.OUT, ING.COVERAGE_MD, ING.COVERAGE_JSON)
+    try:
+        assets_run.OUT = sandbox
+        assets_run.INCOMING = inc
+        assets_run.MANIFEST = sandbox / "manifest.jsonl"
+        VR.OUT = sandbox / "tier1"
+        ING.COVERAGE_MD = sandbox / "tier1" / "coverage.md"
+        ING.COVERAGE_JSON = sandbox / "tier1" / "coverage.json"
+
+        res = ING.run(load=False, verbose=False)
+        scan, cov = res["scan"], res["coverage"]
+
+        # 1-2. обнаружение и сопоставление
+        check("M1 настоящий файл сопоставлен с video_id",
+              list(scan["matched"]) == [real_id], str(list(scan["matched"])))
+        check("M2 файл с чужим id назван несопоставленным, а не проигнорирован",
+              scan["unmatched"] == ["9999999999999999999.mp4"],
+              str(scan["unmatched"]))
+        check("M3 неподдерживаемое расширение выделено отдельно",
+              scan["unsupported"] == [f"{real_id}.txt"], str(scan["unsupported"]))
+        check("M4 служебные файлы пропущены молча",
+              scan["ignored"] == [".gitkeep"], str(scan["ignored"]))
+
+        # 3-5. валидация, SHA-256, регистрация
+        reg = [a for a in res["assets"] if a["video_id"] == real_id]
+        check("M5 ролик зарегистрирован ровно одной строкой", len(reg) == 1)
+        a = reg[0]
+        check("M6 ассет валиден", a["asset_status"] == "valid", a["asset_status"])
+        check("M7 SHA-256 посчитан",
+              isinstance(a["sha256"], str) and len(a["sha256"]) == 64,
+              (a["sha256"] or "")[:16])
+        check("M8 промер заполнен полностью",
+              all(a[k] is not None for k in A.REQUIRED_FOR_VALID),
+              f"{a['width']}x{a['height']} @{a['fps']} {a['duration_sec']}c")
+        check("M9 строка проходит валидатор политики",
+              A.validate_record(a) == [], str(A.validate_record(a)))
+        check("M10 остальные 15 роликов остались missing",
+              sum(1 for x in res["assets"] if x["asset_status"] == "missing")
+              == len(videos) - 1)
+
+        # 6. Tier 1 на настоящем файле
+        mine = [r for r in res["rows"] if r["video_id"] == real_id]
+        valued = [r for r in mine if r["feature_status"] not in V.ABSENT_STATUS]
+        check("M11 у ролика с файлом появились настоящие признаки",
+              len(valued) > 0, f"{len(valued)} из {len(mine)}")
+        vals = {r["feature_name"]: r["feature_value"] for r in valued}
+        check("M12 геометрия прочитана из файла",
+              vals.get("asset_width") == "360" and vals.get("asset_height") == "640",
+              f"{vals.get('asset_width')}x{vals.get('asset_height')}")
+        check("M13 структура посчитана: два плана -> одна смена",
+              vals.get("shot_count") == "2"
+              and vals.get("scene_change_count") == "1",
+              f"shots={vals.get('shot_count')}")
+        check("M14 звук распознан", vals.get("audio_present") == "true")
+        check("M15 без детектора признак остался unavailable, а не false",
+              all(r["feature_value"] is None for r in mine
+                  if r["feature_name"] in ("face_present", "person_present",
+                                           "speech_present", "text_present")))
+
+        # 7. доказательства
+        check("M16 у каждого значения есть asset_sha256 в основании",
+              all(r["source_basis"]["asset_sha256"] == a["sha256"]
+                  for r in valued))
+        check("M17 у каждого значения есть extractor_version и policy_version",
+              all(r["extractor_version"] and r["policy_version"] for r in valued))
+        check("M18 кадровые признаки называют использованные кадры",
+              all(any(e.startswith("frames:") for e in r["evidence_refs"])
+                  for r in valued
+                  if r["feature_group"] in ("visual_structure", "opening")))
+        check("M19 оркестратор подтвердил полноту доказательств",
+              res["evidence_ok"] is True)
+
+        # 8. детерминизм
+        check("M20 оркестратор подтвердил воспроизводимость",
+              res["deterministic"] is True)
+        again = ING.run(load=False, verbose=False)
+        check("M21 повторный прогон даёт те же хеши",
+              again["hashes"] == res["hashes"], res["hashes"]["tier1"][:16])
+        check("M22 повторный прогон не добавляет ассетов",
+              again["added"] == [], f"добавлено {len(again['added'])}")
+
+        # 9. покрытие
+        check("M23 статус стал PARTIAL при части файлов",
+              cov["video_asset_status"] == "PARTIAL",
+              cov["video_asset_status"])
+        check("M24 покрытие считает ролики с ассетом",
+              cov["n_videos_with_current_asset"] == 1)
+        check("M25 заполненность больше нуля и меньше единицы",
+              0 < cov["feature_fill_rate"] < 1,
+              f"{100 * cov['feature_fill_rate']:.1f}%")
+        check("M26 отчёт о покрытии записан",
+              ING.COVERAGE_MD.exists() and ING.COVERAGE_JSON.exists())
+        md = ING.COVERAGE_MD.read_text(encoding="utf-8")
+        check("M27 отчёт называет статус и несопоставленный файл",
+              "VIDEO_ASSET_STATUS: PARTIAL" in md
+              and "9999999999999999999.mp4" in md)
+        check("M28 отчёт перечисляет причины отсутствия",
+              V.NO_DETECTOR in md or V.NO_OCR in md)
+        check("M29 ни одна причина не ссылается на подпись или хештеги",
+              not any(s in json.dumps(res["rows"], ensure_ascii=False)
+                      for s in ('"caption"', '"hashtags"')))
+    finally:
+        (assets_run.OUT, assets_run.INCOMING, assets_run.MANIFEST,
+         VR.OUT, ING.COVERAGE_MD, ING.COVERAGE_JSON) = saved
+
+    # реальные артефакты не пострадали
+    real = assets_run.load_manifest()
+    check("M30 настоящий манифест не тронут тестом",
+          len(real) == len(videos)
+          and all(r["asset_status"] == "missing" for r in real),
+          f"{len(real)} строк, все missing")
+    check("M31 настоящий каталог приёма по-прежнему пуст",
+          list(assets_run.scan_incoming()["matched"]) == [])
+
+
 if __name__ == "__main__":
     built = build_fixtures()
     print(f"инструменты промера: " + ", ".join(
@@ -735,7 +881,8 @@ if __name__ == "__main__":
                test_G_evidence_required, test_H_semantic_leakage_blocked,
                test_I_deterministic_extraction,
                test_J_missing_video_no_fabrication,
-               test_K_phase51_guards_intact, test_L_publishing_disabled):
+               test_K_phase51_guards_intact, test_L_publishing_disabled,
+               test_M_local_ingestion_workflow):
         fn()
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

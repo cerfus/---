@@ -21,6 +21,5 @@ python3 db/load.py
 python3 reconcile/run.py --load | tail -1
 python3 analytics/run.py --load | tail -1
 python3 features/run.py --load | tail -1
-python3 assets/run.py --load | tail -1
-python3 features/visual_run.py --load | tail -1
+python3 -m assets.ingest --load | tail -2
 python3 insights/run.py --load | tail -1

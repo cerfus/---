@@ -69,6 +69,46 @@ def find_incoming(video_id):
     return hits[0], None
 
 
+def scan_incoming(incoming=None, videos=None):
+    """Полный разбор каталога приёма: что найдено и что с этим не так.
+
+    ДОБАВЛЕНО отдельно от find_incoming намеренно. find_incoming ищет файл
+    ПО ИЗВЕСТНОМУ video_id и о постороннем файле молчит — для сборки
+    манифеста этого достаточно. Но оператору молчание вредит: файл,
+    названный с опечаткой или с чужим id, просто не появится нигде, и
+    человек будет думать, что ролик обработан.
+
+    Возвращает {matched, unmatched, unsupported, ambiguous, ignored}.
+    """
+    inc = Path(incoming) if incoming else INCOMING
+    known = {v["video_id"] for v in (videos if videos is not None
+                                     else load_videos())}
+    out = {"matched": {}, "unmatched": [], "unsupported": [],
+           "ambiguous": {}, "ignored": []}
+    if not inc.exists():
+        return out
+    by_stem = {}
+    for f in sorted(inc.iterdir()):
+        if not f.is_file():
+            continue
+        if f.name.startswith("."):
+            out["ignored"].append(f.name)          # .gitkeep и подобные
+            continue
+        if f.suffix.lower() not in VIDEO_SUFFIXES:
+            out["unsupported"].append(f.name)
+            continue
+        by_stem.setdefault(f.stem, []).append(f)
+    for stem, files in sorted(by_stem.items()):
+        if stem not in known:
+            out["unmatched"] += [f.name for f in files]
+            continue
+        if len(files) > 1:
+            out["ambiguous"][stem] = [f.name for f in files]
+            continue
+        out["matched"][stem] = files[0]
+    return out
+
+
 def register(video_id, existing, path=None, ambiguity=None):
     """Одна строка манифеста для ролика. None — регистрировать нечего."""
     version = A.next_version(existing, video_id)
@@ -104,7 +144,13 @@ def register(video_id, existing, path=None, ambiguity=None):
     if dup is not None:
         return None                # те же байты уже зарегистрированы
 
-    rel = str(path.relative_to(ROOT))
+    # Путь относительно проекта — так source_uri читаем и переносим.
+    # Файл вне дерева проекта (например, в тестовой песочнице) записывается
+    # как есть: падать из-за формы пути нельзя.
+    try:
+        rel = str(path.relative_to(ROOT))
+    except ValueError:
+        rel = str(path)
     acquired = datetime.fromtimestamp(path.stat().st_mtime,
                                       tz=timezone.utc).isoformat()
     rec = {
@@ -186,6 +232,10 @@ def build(write=True):
                 1 for v in videos if A.current_asset(rows, v["video_id"])),
             "ingest_contract": "data/assets/incoming/<video_id>.<ext>",
             "problems": problems,
+            "incoming_scan": {k: (sorted(v) if isinstance(v, list)
+                                  else {kk: (vv if isinstance(vv, list) else str(vv))
+                                        for kk, vv in sorted(v.items())})
+                              for k, v in scan_incoming().items()},
         }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return rows, added, problems, h, run_id
 

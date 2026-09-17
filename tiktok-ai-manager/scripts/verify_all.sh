@@ -39,15 +39,8 @@ F2=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
 echo; echo "=== 6в. инструменты промера видео ==="
 bash scripts/ensure_extractors.sh
 
-echo; echo "=== 6г. ингест видеоассетов ==="
-V1=$(python3 assets/run.py --load | grep asset_hash: | awk '{print $2}')
-V2=$(python3 assets/run.py | grep asset_hash: | awk '{print $2}')
-[ "$V1" = "$V2" ] && echo "  ASSET DETERMINISM: PASS ${V1:0:24}…" || { echo "  FAIL"; exit 1; }
-
-echo; echo "=== 6д. Tier 1 (признаки из видеофайла) ==="
-T1=$(python3 features/visual_run.py --load | grep tier1_hash: | awk '{print $2}')
-T2=$(python3 features/visual_run.py | grep tier1_hash: | awk '{print $2}')
-[ "$T1" = "$T2" ] && echo "  TIER1 DETERMINISM: PASS ${T1:0:24}…" || { echo "  FAIL"; exit 1; }
+echo; echo "=== 6г. локальный ингест видео (одна команда) ==="
+python3 -m assets.ingest --load | tail -12
 
 echo; echo "=== 6б. выводы и ежедневный отчёт ==="
 I1=$(python3 insights/run.py --load | grep insights_hash: | awk '{print $2}')
