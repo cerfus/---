@@ -96,6 +96,81 @@ target)`. Любой слой обязан спросить там; неизве
 * `experiments`: триггер отвергает механическую пару в
   `variable` × (`success_metric` ∪ `secondary_metrics`).
 
+## Видеоассеты и Tier 1
+
+Tier 1 — признаки, извлекаемые **из самого видеофайла**. Главное правило
+фазы: **нет файла — нет признака**. Ни подпись, ни хештеги, ни статистика
+не заменяют наблюдение кадра.
+
+### Контракт ингеста
+
+Файл кладётся в `data/assets/incoming/` с именем, равным `video_id`:
+`7628289075081956640.mp4`. Связь однозначна — `video_id` входит в ссылку на
+ролик. Затем:
+
+```
+bash scripts/ensure_extractors.sh
+python3 assets/run.py --load
+python3 features/visual_run.py --load
+```
+
+Скачивания с TikTok в слое нет: медиа-URL не отдаёт ни Supermetrics, ни
+Metricool. Бинарники в git не попадают — репозиторий хранит манифест с
+`sha256` и ссылкой.
+
+### Идентичность ассета
+
+* содержимое определяется **sha256**; `asset_uid = uuid5(NS, sha256)`, то
+  есть одни и те же байты дают один идентификатор даже под разными роликами;
+* один ролик может иметь несколько версий (`asset_version`);
+* **текущей** становится последняя **валидная** версия — битый или
+  отсутствующий файл текущим не становится никогда
+  (`video_assets_current`);
+* валидный ассет обязан быть промерен полностью: без `sha256`, размера,
+  mime, длительности, геометрии, fps и числа кадров статус `valid` запрещён
+  CHECK-ом;
+* таблица append-only: права + триггер, как у `video_features`.
+
+### Статусы Tier 1
+
+`observed` · `derived` · `unavailable` · `invalid_asset` ·
+`insufficient_evidence` · `insufficient_baseline`.
+
+**`unavailable` никогда не равен `false`.** Нет видео — `face_present`
+получает статус `unavailable`, а не значение «лиц нет». У отсутствующего
+признака все три колонки значения равны NULL, и это закрыто CHECK-ом.
+
+### Что запрещено объявлять
+
+`hook`, `hook_type`, `topic`, `emotion`, `visual_style`, `story_structure`,
+`cta`, `editing_style`, `character` — семантические признаки. Утверждающий
+статус по ним требует `source_basis.asset_sha256`, ссылающегося на
+**валидный зарегистрированный ассет**. Проверяется дважды:
+
+* в коде — `features.visual_policies.semantic_claim_allowed()`, единственная
+  точка решения;
+* в БД — триггеры `trg_vf_semantic` (на `video_features`) и
+  `trg_dna_semantic` (на `content_dna`), реестр `semantic_feature_names`.
+
+Вместо смыслового «крючка» Tier 1 наблюдает начало ролика:
+`opening_duration_sec`, `opening_visual_presence`, `opening_scene_change`,
+`opening_text_present`, `opening_speech_present`, `opening_person_present`.
+
+Таблица `semantic_annotations` — **подготовленный интерфейс**, а не слой
+признаков: `is_authoritative` закрыт CHECK-ом в FALSE. Попадание аннотаций
+в Content DNA требует отдельной политики и решения владельца.
+
+### Версия экстрактора входит в идентичность
+
+`(video_id, feature_name, policy_version, extractor_version)`. Другой
+декодер может прочитать те же кадры иначе, поэтому версии библиотек
+записаны в `extractor_version`, а версии сосуществуют. Действующее значение
+отдаёт `video_features_current`.
+
+Инструменты промера закреплены в `requirements-extract.txt`. Их отсутствие
+не ломает систему: все Tier 1 признаки честно становятся `unavailable`
+с причиной `extractor_tooling_unavailable`.
+
 ## Пороги доказательности
 
 - Закономерность не может быть переведена в **FACT** при `N < 25` роликов.

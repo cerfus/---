@@ -36,6 +36,19 @@ F1=$(python3 features/run.py --load | grep feature_hash: | awk '{print $2}')
 F2=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
 [ "$F1" = "$F2" ] && echo "  FEATURE DETERMINISM: PASS ${F1:0:24}…" || { echo "  FAIL"; exit 1; }
 
+echo; echo "=== 6в. инструменты промера видео ==="
+bash scripts/ensure_extractors.sh
+
+echo; echo "=== 6г. ингест видеоассетов ==="
+V1=$(python3 assets/run.py --load | grep asset_hash: | awk '{print $2}')
+V2=$(python3 assets/run.py | grep asset_hash: | awk '{print $2}')
+[ "$V1" = "$V2" ] && echo "  ASSET DETERMINISM: PASS ${V1:0:24}…" || { echo "  FAIL"; exit 1; }
+
+echo; echo "=== 6д. Tier 1 (признаки из видеофайла) ==="
+T1=$(python3 features/visual_run.py --load | grep tier1_hash: | awk '{print $2}')
+T2=$(python3 features/visual_run.py | grep tier1_hash: | awk '{print $2}')
+[ "$T1" = "$T2" ] && echo "  TIER1 DETERMINISM: PASS ${T1:0:24}…" || { echo "  FAIL"; exit 1; }
+
 echo; echo "=== 6б. выводы и ежедневный отчёт ==="
 I1=$(python3 insights/run.py --load | grep insights_hash: | awk '{print $2}')
 I2=$(python3 insights/run.py | grep insights_hash: | awk '{print $2}')
@@ -54,6 +67,8 @@ echo; echo "=== 11в. тесты Phase 5 (выводы и отчёт) ==="; pyth
 echo; echo "=== 11г. тесты Phase 5.1 (механическая зависимость) ==="; python3 tests/test_mechanical_dependency.py | tail -2
 
 echo; echo "=== 11д. регрессия Phase 5.1 hardening (A-G + порядок) ==="; python3 tests/test_phase51_hardening.py | tail -2
+
+echo; echo "=== 11е. тесты Phase 6 (ассеты и Tier 1) ==="; python3 tests/test_phase6_assets.py | tail -2
 
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2

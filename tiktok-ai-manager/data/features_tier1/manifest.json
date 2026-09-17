@@ -1,0 +1,23 @@
+{
+  "asset_hash": "d1de44f5d95543676e252d57481f241b38aab2e9f463804c924df8679cbb3ea7",
+  "by_group_status": {
+    "audio/unavailable": 48,
+    "human/unavailable": 32,
+    "on_screen_text/unavailable": 48,
+    "opening/unavailable": 96,
+    "technical/unavailable": 96,
+    "visual_structure/unavailable": 64
+  },
+  "by_status": {
+    "unavailable": 384
+  },
+  "engine_version": "tier1-engine-1.0.0",
+  "extractor_version": "tier1-probe-1.0.0+cv2=5.0.0+numpy=2.4.6+ffmpeg=7.0.2-static",
+  "n_features_declared": 24,
+  "n_rows": 384,
+  "n_videos": 16,
+  "n_videos_with_current_asset": 0,
+  "policy_version": "visual-feature-policy-1.0.0",
+  "tier1_hash": "d1ca25c17ec6993e5d8618a17bfafa0b3044bb87a939880a862f2533b8a6d4a3",
+  "tier1_run_id": "2416edcd-127c-584a-8ff7-bffd85202585"
+}

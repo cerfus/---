@@ -106,7 +106,8 @@ INSERT_FEATURE = """INSERT INTO video_features (
   extractor_version, source_basis, reconciliation_basis, evidence_refs,
   computed_from, extra, computed_at, run_id)
 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s::jsonb,%s,%s)
-ON CONFLICT (video_id, feature_name, policy_version) DO NOTHING"""
+ON CONFLICT (video_id, feature_name, policy_version, extractor_version)
+  DO NOTHING"""
 
 
 def load_to_db(rows, run_id, computed_at=None):

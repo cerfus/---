@@ -100,9 +100,15 @@ def test_c_runtime_cannot_modify():
                     " has_table_privilege('tiktok_rw','video_features','DELETE')")
         ins, upd, dele = cur.fetchone()
         check("права: INSERT есть, UPDATE и DELETE нет", ins and not upd and not dele)
-        cur.execute("""SELECT count(*) FROM pg_trigger
-                        WHERE tgrelid='video_features'::regclass AND NOT tgisinternal""")
-        check("триггер append-only установлен как второй замок", cur.fetchone()[0] == 1)
+        # Проверка по ИМЕНИ, а не по количеству: считать триггеры — значит
+        # ломаться от каждого нового замка. Phase 6 добавил второй триггер
+        # (запрет семантики без видео), и это не отменяет первого.
+        cur.execute("""SELECT tgname FROM pg_trigger
+                        WHERE tgrelid='video_features'::regclass
+                          AND NOT tgisinternal ORDER BY tgname""")
+        triggers = [r[0] for r in cur.fetchall()]
+        check("триггер append-only установлен как второй замок",
+              "trg_vf_append_only" in triggers, str(triggers))
 
 
 # ───────────────────────────────────────────────────────────────── TEST D

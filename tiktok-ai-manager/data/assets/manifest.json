@@ -1,0 +1,14 @@
+{
+  "asset_hash": "d1de44f5d95543676e252d57481f241b38aab2e9f463804c924df8679cbb3ea7",
+  "asset_run_id": "41d99035-a85d-5c5b-9d86-7030bc7f945f",
+  "extractor_version": "tier1-probe-1.0.0+cv2=5.0.0+numpy=2.4.6+ffmpeg=7.0.2-static",
+  "ingest_contract": "data/assets/incoming/<video_id>.<ext>",
+  "n_assets": 16,
+  "n_invalid": 0,
+  "n_missing": 16,
+  "n_valid": 0,
+  "n_videos": 16,
+  "n_videos_with_current_asset": 0,
+  "policy_version": "asset-policy-1.0.0",
+  "problems": []
+}

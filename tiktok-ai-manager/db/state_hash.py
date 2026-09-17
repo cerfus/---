@@ -55,6 +55,15 @@ SPEC = {
     "analytics_account_baseline": ("window_name, metric", {"id", "computed_at"}),
     "analytics_coverage": ("scope, metric NULLS FIRST", {"id", "computed_at"}),
     "analytics_association": ("x_metric, y_metric", {"id", "computed_at"}),
+    # Phase 6. Идентичность ассета — (video_id, asset_version); asset_uid
+    # детерминирован от sha256 и потому остаётся в слепке как доказательство.
+    # registered_at и acquired_at — моменты записи и получения файла, они
+    # закономерно различаются между машинами и исключены.
+    "video_assets": ("video_id, asset_version",
+                     {"asset_id", "registered_at", "acquired_at", "run_id"}),
+    "semantic_feature_names": ("feature_name", set()),
+    "semantic_annotations": ("video_id, asset_sha256, feature_name, annotator",
+                             {"annotation_id", "created_at", "run_id"}),
 }
 
 
