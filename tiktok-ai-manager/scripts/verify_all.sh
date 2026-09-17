@@ -31,15 +31,22 @@ A1=$(python3 analytics/run.py --load | grep analytics_hash | awk '{print $2}')
 A2=$(python3 analytics/run.py | grep analytics_hash | awk '{print $2}')
 [ "$A1" = "$A2" ] && echo "  ANALYTICS DETERMINISM: PASS ${A1:0:24}…" || { echo "  FAIL"; exit 1; }
 
-echo; echo "=== 6. тесты Phase 1 ==="; python3 tests/test_phase1.py | tail -2
-echo; echo "=== 7. тесты Phase 2 (движок сверки) ==="; python3 tests/test_reconcile_engine.py | tail -2
-echo; echo "=== 8. тесты Phase 3 (аналитика) ==="; python3 tests/test_analytics.py | tail -2
+echo; echo "=== 6. слой признаков (JSONL, запись в БД заблокирована) ==="
+F1=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
+F2=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
+[ "$F1" = "$F2" ] && echo "  FEATURE DETERMINISM: PASS ${F1:0:24}…" || { echo "  FAIL"; exit 1; }
 
-echo; echo "=== 9. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
-echo; echo "=== 10. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
-echo; echo "=== 11. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6
+echo; echo "=== 7. тесты Phase 1 ==="; python3 tests/test_phase1.py | tail -2
+echo; echo "=== 8. тесты Phase 2 (движок сверки) ==="; python3 tests/test_reconcile_engine.py | tail -2
+echo; echo "=== 9. тесты Phase 3 (аналитика) ==="; python3 tests/test_analytics.py | tail -2
 
-echo; echo "=== 12. способность публикации ==="
+echo; echo "=== 11. тесты Phase 4 (признаки) ==="; python3 tests/test_features.py | tail -2
+
+echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
+echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
+echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6
+
+echo; echo "=== 14. способность публикации ==="
 python3 - <<'PY'
 import sys; sys.path.insert(0,'.')
 import psycopg; from core import config

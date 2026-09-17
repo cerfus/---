@@ -1,0 +1,15 @@
+{
+  "db_persistence": {
+    "blocked": true,
+    "consequence": "пересчёт под новой policy_version затёр бы прошлый результат",
+    "decision_required": "владелец выбирает вариант хранилища",
+    "reason": "video_features: PRIMARY KEY (video_id) без версии + UPDATE у рантайма"
+  },
+  "engine_version": "feature-engine-1.0.0",
+  "feature_hash": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
+  "feature_run_id": "7254a75a-75e9-54d7-b190-9ea872b04e44",
+  "n_feature_names": 45,
+  "n_rows": 720,
+  "n_videos": 16,
+  "policy_version": "feature-policy-1.0.0"
+}
