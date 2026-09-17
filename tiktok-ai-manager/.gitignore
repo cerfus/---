@@ -1,5 +1,10 @@
-__pycache__/
+!.env.example
 *.pyc
-db/
-.env
 *.session
+.env
+.env.*
+__pycache__/
+config/settings.toml
+data/media/
+db/*.db
+logs/
