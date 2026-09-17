@@ -16,6 +16,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import reconciliation as rec
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 RAW = ROOT / "data" / "raw"
 OBS = ROOT / "data" / "observations" / "exp004_observations.jsonl"
@@ -95,6 +98,7 @@ def load_round(path, published_map):
                 continue
             out.append({
                 "schema": "exp004_observation/v1",
+                "observation_id": f"{round_id}:{source}:{vid}:{m}",
                 "round": round_id, "video_id": vid, "source": source, "metric": m,
                 "value": rec[m],
                 "observed_at": at, "observed_at_precision": prec,
@@ -191,39 +195,79 @@ def deltas():
         print()
 
 
+# R3 (metricool) и R3b (supermetrics) — один логический срез, разнесённый на 28 с
+LOGICAL_ROUND = {"R1": 1, "R2": 2, "R3": 3, "R3b": 3}
+
+
+def build_series(obs):
+    """{(video, metric): {source: [(логический_раунд, значение), ...]}}"""
+    ser = {}
+    for o in obs:
+        if o["value"] is None:
+            continue
+        lr = LOGICAL_ROUND.get(o["round"])
+        if lr is None:
+            continue
+        ser.setdefault((o["video_id"], o["metric"]), {}) \
+           .setdefault(o["source"], []).append((lr, o["value"]))
+    for by_src in ser.values():
+        for s in by_src:
+            by_src[s].sort()
+    return ser
+
+
+def obs_ids(obs, video_id, metric, rounds_sources):
+    out = []
+    for o in obs:
+        if o["video_id"] == video_id and o["metric"] == metric \
+           and (o["round"], o["source"]) in rounds_sources:
+            out.append(o["observation_id"])
+    return sorted(out)
+
+
 def reconcile():
     obs = load_obs()
-    idx = {}
-    for o in obs:
-        idx.setdefault((o["round"], o["video_id"], o["metric"]), {})[o["source"]] = o["value"]
-    print(f"  {'round':<7}{'video':>8} {'metric':<24}{'supermetrics':>14}{'metricool':>12}"
-          f"{'abs':>8}{'rel':>9}  status")
-    stats = {}
-    for (rnd, vid, m), by in sorted(idx.items()):
-        sm, mt = by.get("supermetrics"), by.get("metricool")
-        st = classify(m, sm, mt)
-        stats[st] = stats.get(st, 0) + 1
-        if st in ("both_discrepancy", "both_expected_transform"):
-            a, b = float(sm), float(mt)
-            d = abs(a - b); rel = d / max(abs(a), abs(b)) if max(abs(a), abs(b)) else 0
-            print(f"  {rnd:<7}{vid[-6:]:>8} {m:<24}{a:>14.3f}{b:>12.3f}{d:>8.3f}{rel:>9.5f}  {st}")
-    print("\nсводка статусов:")
+    ser = build_series(obs)
+    results, stats = [], {}
+    for (vid, metric), by_src in sorted(ser.items()):
+        for lr in sorted({t for s in by_src.values() for t, _ in s}):
+            r = rec.classify(metric, by_src, lr)
+            st = r["reconciliation_status"]
+            stats[st] = stats.get(st, 0) + 1
+            results.append((lr, vid, metric, r))
+
+    print("СТАТУСЫ СВЕРКИ — итог")
     for k in sorted(stats):
-        print(f"  {k:<28}{stats[k]}")
+        mark = "FACT разрешён" if rec.fact_allowed(k) else "FACT ЗАПРЕЩЁН"
+        print(f"  {k:<26}{stats[k]:>5}   {mark}")
 
+    lagged = [x for x in results if x[3]["reconciliation_status"] == "both_lagged"]
+    disc = [x for x in results if x[3]["reconciliation_status"] == "both_discrepancy"]
 
-def classify(metric, sm, mt):
-    if sm is None and mt is None:
-        return "unavailable"
-    if sm is None or mt is None:
-        return "single_source"
-    a, b = float(sm), float(mt)
-    if metric == "duration_sec":
-        import math
-        return "both_expected_transform" if math.floor(a) == b else "both_discrepancy"
-    if a == b:
-        return "both_matched"
-    return "both_discrepancy"
+    print(f"\nboth_lagged: {len(lagged)}")
+    for lr, vid, metric, r in lagged:
+        ev = r["lag_evidence"]
+        rounds = {k: v for k, v in LOGICAL_ROUND.items()}
+        src_rounds = {(k, r["canonical_source"]) for k, v in rounds.items()
+                      if v in (ev["t1"], ev["t2"])} | \
+                     {(k, r["lagging_source"]) for k, v in rounds.items() if v == ev["t2"]}
+        print(f"  ролик …{vid[-6:]} | метрика {metric} | логический срез {lr}")
+        print(f"    canonical_source : {r['canonical_source']}")
+        print(f"    lagging_source   : {r['lagging_source']}")
+        print(f"    lag_basis        : {r['lag_basis']}")
+        print(f"    доказательство   : канон {ev['canonical_t1_value']:g} -> "
+              f"{ev['canonical_t2_value']:g}, отстающий {ev['lagging_t2_value']:g} "
+              f"== канон на срезе {ev['t1']}")
+        print(f"    statement        : {r['statement']}")
+        for oid in obs_ids(obs, vid, metric, src_rounds):
+            print(f"      evidence: {oid}")
+
+    print(f"\nboth_discrepancy (осталось): {len(disc)}")
+    for lr, vid, metric, r in disc:
+        print(f"  …{vid[-6:]} {metric} срез {lr}: "
+              f"abs={r['absolute_difference']:g} rel={r['relative_difference']:.5f}")
+    if not disc:
+        print("  (ни одного)")
 
 
 def verify():
