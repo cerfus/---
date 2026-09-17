@@ -1,0 +1,26 @@
+{"conclusion": "FACT по метрике comments", "detail": {"discrepant": 0, "eligible": 16, "metric": "comments", "total": 48, "unavailable": 0, "untested": 32}, "reason": "часть наблюдений непригодна по статусу сверки"}
+{"conclusion": "FACT по метрике likes", "detail": {"discrepant": 0, "eligible": 16, "metric": "likes", "total": 48, "unavailable": 0, "untested": 32}, "reason": "часть наблюдений непригодна по статусу сверки"}
+{"conclusion": "FACT по метрике shares", "detail": {"discrepant": 0, "eligible": 16, "metric": "shares", "total": 48, "unavailable": 0, "untested": 32}, "reason": "часть наблюдений непригодна по статусу сверки"}
+{"conclusion": "FACT по метрике src_foryou", "detail": {"discrepant": 0, "eligible": 0, "metric": "src_foryou", "total": 16, "unavailable": 16, "untested": 0}, "reason": "часть наблюдений непригодна по статусу сверки"}
+{"conclusion": "FACT по метрике views", "detail": {"discrepant": 0, "eligible": 32, "metric": "views", "total": 48, "unavailable": 0, "untested": 16}, "reason": "часть наблюдений непригодна по статусу сверки"}
+{"conclusion": "baseline окна 24h_baseline", "detail": {"age_bucket": "T+24h", "window": "24h_baseline"}, "reason": "в выборке нет роликов этого возрастного бакета"}
+{"conclusion": "baseline окна 48h_baseline", "detail": {"age_bucket": "T+48h", "window": "48h_baseline"}, "reason": "в выборке нет роликов этого возрастного бакета"}
+{"conclusion": "baseline окна 7d_live_baseline", "detail": {"age_bucket": "T+7d", "window": "7d_live_baseline"}, "reason": "в выборке нет роликов этого возрастного бакета"}
+{"conclusion": "гипотеза о связи duration_sec и avg_view_time_sec", "detail": {"n": 16, "p": 0.16090051784230053, "rho": 0.3679176860657877}, "reason": "связь не выделяется из шума при n=16 (rho=+0.368, p≈0.161 > 0.05)"}
+{"conclusion": "гипотеза о связи duration_sec и engagement_rate", "detail": {"n": 16, "p": 0.9181269848737842, "rho": 0.02796174414099986}, "reason": "связь не выделяется из шума при n=16 (rho=+0.028, p≈0.918 > 0.05)"}
+{"conclusion": "гипотеза о связи duration_sec и views", "detail": {"n": 16, "p": 0.5129355553660639, "rho": -0.17660048931157807}, "reason": "связь не выделяется из шума при n=16 (rho=-0.177, p≈0.513 > 0.05)"}
+{"conclusion": "любой вывод о поведении метрик в первые часы жизни ролика", "detail": {"buckets_present": ["backfill"]}, "reason": "нет роликов моложе 24 часов; Phase 0 остаётся BLOCKED — DATA COVERAGE"}
+{"conclusion": "любой вывод о признаке character", "detail": {"feature": "character"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке cta", "detail": {"feature": "cta"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке editing_style", "detail": {"feature": "editing_style"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке emotion", "detail": {"feature": "emotion"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке hook_type", "detail": {"feature": "hook_type"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке story_structure", "detail": {"feature": "story_structure"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке topic", "detail": {"feature": "topic"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке traffic_source", "detail": {"feature": "traffic_source"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод о признаке visual_style", "detail": {"feature": "visual_style"}, "reason": "нет источника данных для признака"}
+{"conclusion": "любой вывод уровня FACT по метрикам аккаунта", "detail": {"metrics": ["avg_view_time_sec", "comment_rate", "comments", "completion_rate", "duration_sec", "engagement_rate", "favorite_rate", "favorites", "like_rate", "likes", "reach", "share_rate", "shares", "total_time_watched_sec", "views"], "n": 16, "needed": 9}, "reason": "размер выборки n=16 ниже порога 25"}
+{"conclusion": "признак completion_vs_baseline", "detail": {"feature": "completion_vs_baseline", "n": 16}, "reason": "baseline недостаточен и включает сам ролик"}
+{"conclusion": "признак engagement_vs_baseline", "detail": {"feature": "engagement_vs_baseline", "n": 16}, "reason": "baseline недостаточен и включает сам ролик"}
+{"conclusion": "признак views_vs_baseline", "detail": {"feature": "views_vs_baseline", "n": 16}, "reason": "baseline недостаточен и включает сам ролик"}
+{"conclusion": "причинное утверждение о duration_sec и completion_rate", "detail": {"n": 16, "rho": -0.7167036524561544, "sample_status": "insufficient_sample"}, "reason": "нет завершённого эксперимента"}

@@ -36,6 +36,11 @@ F1=$(python3 features/run.py --load | grep feature_hash: | awk '{print $2}')
 F2=$(python3 features/run.py | grep feature_hash: | awk '{print $2}')
 [ "$F1" = "$F2" ] && echo "  FEATURE DETERMINISM: PASS ${F1:0:24}…" || { echo "  FAIL"; exit 1; }
 
+echo; echo "=== 6б. выводы и ежедневный отчёт ==="
+I1=$(python3 insights/run.py --load | grep insights_hash: | awk '{print $2}')
+I2=$(python3 insights/run.py | grep insights_hash: | awk '{print $2}')
+[ "$I1" = "$I2" ] && echo "  INSIGHTS DETERMINISM: PASS ${I1:0:24}…" || { echo "  FAIL"; exit 1; }
+
 echo; echo "=== 7. тесты Phase 1 ==="; python3 tests/test_phase1.py | tail -2
 echo; echo "=== 8. тесты Phase 2 (движок сверки) ==="; python3 tests/test_reconcile_engine.py | tail -2
 echo; echo "=== 9. тесты Phase 3 (аналитика) ==="; python3 tests/test_analytics.py | tail -2
@@ -43,6 +48,8 @@ echo; echo "=== 9. тесты Phase 3 (аналитика) ==="; python3 tests/t
 echo; echo "=== 11. тесты Phase 4 (признаки) ==="; python3 tests/test_features.py | tail -2
 
 echo; echo "=== 11б. тесты хранилища признаков ==="; python3 tests/test_feature_storage.py | tail -2
+
+echo; echo "=== 11в. тесты Phase 5 (выводы и отчёт) ==="; python3 tests/test_insights.py | tail -2
 
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
