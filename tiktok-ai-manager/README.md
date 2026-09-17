@@ -8,17 +8,34 @@ Content DNA ещё не сформирован — не хватает данн�
 
 ## Как забрать проект на свой компьютер (Windows)
 
-Проект собран в облачном контейнере и лежит в репозитории на GitHub.
-Чтобы получить его в `C:\Users\dopok\Desktop\tiktok-ai-manager`:
+Проект собран в облачном контейнере и живёт в репозитории на GitHub.
+Локальная папка `C:\Users\dopok\Desktop\tiktok-ai-manager` наполняется
+через клонирование — прямого доступа к диску у ассистента нет.
+
+Сейчас проект лежит подпапкой в репозитории `cerfus/---`, поэтому нужен
+промежуточный клон (PowerShell):
 
 ```powershell
 cd C:\Users\dopok\Desktop
 git clone -b claude/tiktok-manager-env-audit-8mh3mg https://github.com/cerfus/--- temp-clone
-move temp-clone\tiktok-ai-manager .\tiktok-ai-manager
-rmdir /s /q temp-clone
+Move-Item temp-clone\tiktok-ai-manager .\tiktok-ai-manager
+Remove-Item -Recurse -Force temp-clone
 ```
 
-Нужен установленный Git для Windows и Python 3.11+.
+Минус этого варианта: папка на Desktop окажется без истории git —
+обновления придётся забирать тем же способом заново.
+
+Если проект вынести в отдельный репозиторий `cerfus/tiktok-ai-manager`,
+команда становится одной, а папка остаётся полноценным git-репозиторием:
+
+```powershell
+cd C:\Users\dopok\Desktop
+git clone https://github.com/cerfus/tiktok-ai-manager
+```
+
+Дальше обновления забираются через `git pull`.
+
+Требуется установленный Git для Windows и Python 3.11+.
 Проверить: `git --version` и `python --version`.
 
 ## Запуск
