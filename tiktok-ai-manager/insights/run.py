@@ -126,7 +126,7 @@ def load_to_db(ins, blocked, run_id, md_path, coverage_rows, n_videos):
               summary, n_videos_in_period, n_new_snapshots, data_completeness,
               blocked_conclusions, run_id)
             VALUES (%s,'daily',%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
-            ON CONFLICT (account_id, report_type, period_start, run_id) DO NOTHING""",
+            ON CONFLICT (account_id, report_type, period_start, period_end, run_id) DO NOTHING""",
             (account_id, PERIOD, PERIOD, now, md_path,
              f"FACT: 0 · HYPOTHESIS: {sum(1 for x in ins if x['claim_type']=='HYPOTHESIS')}"
              f" · заблокировано выводов: {len(blocked)}",

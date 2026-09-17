@@ -11,6 +11,7 @@
 import json
 import re
 
+from insights import pipeline
 from insights import policies as P
 
 REPORT_VERSION = "daily-report-1.0.0"
@@ -110,7 +111,20 @@ def build(period, ins, blocked, account_rows, coverage_rows, experiments,
                   f"Кандидатов рассмотрено и отклонено: {len(cand)} "
                   f"(механически зависимых пар — {len(mech)}, "
                   f"неотличимых от шума — {len(noise)}). "
-                  "Основания в разделе 8."]
+                  "Основания в разделе 8.",
+                  "",
+                  "Порядок проверок: " + " → ".join(pipeline.CHECK_ORDER) + ". "
+                  "Значимость проверяется ПОСЛЕ механической зависимости: "
+                  "обойти этот гейт она не может."]
+        undecided = [b for b in blocked
+                     if b.get("reason_code")
+                     == P.MECHANICAL_CANDIDATE_REASON_CODE]
+        if undecided:
+            L += ["",
+                  f"Пар с нерешённой механической природой: {len(undecided)}. "
+                  "Гипотеза по ним возможна, повышение до рекомендации, "
+                  "доказательства Content DNA или основания эксперимента — нет, "
+                  "до отдельного решения владельца."]
         L += [""]
     for h in hyps:
         L += [f"* {h['statement']}",

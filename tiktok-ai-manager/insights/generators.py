@@ -9,6 +9,7 @@
 import hashlib
 import json
 
+from insights import pipeline
 from insights import policies as P
 from insights.validator import assert_valid
 
@@ -35,10 +36,19 @@ def _insight(claim_type, statement, source_kind, n_sample=None,
     return body
 
 
+# Тип для валидатора: у записи блокировки нет ни выборки, ни модальности,
+# но причинные и оценочные конструкции ей запрещены так же, как выводу.
+# Причина отдельная: текст блокировки печатается в отчёте наравне с выводами,
+# и до сих пор проверялся только там — то есть уже после выпуска.
+BLOCKED_CLAIM_TYPE = "BLOCKED"
+
+
 def _blocked(what, why, reason_code, detail=None):
     """Заблокированный вывод. reason_code — машинная причина: последующие фазы
     обязаны уметь отличать «мало данных» от «связь механическая» без разбора
     человеческого текста."""
+    for part in (what, why):
+        assert_valid(part, BLOCKED_CLAIM_TYPE)
     return {"conclusion": what, "reason": why, "reason_code": reason_code,
             "detail": detail or {}}
 
@@ -156,58 +166,100 @@ def from_sample_size(account_rows, n_videos):
 
 # ── измеренные связи ────────────────────────────────────────────────────────
 def from_associations(assoc_rows):
+    """Выводы из измеренных связей — строго через конвейер гейтов.
+
+    Порядок проверок задан в insights/pipeline.py и исполняется там же.
+    Здесь только перевод вердиктов конвейера в выводы и записи блокировок.
+
+    Что попадает в список заблокированных:
+      · стадия, ОСТАНОВИВШАЯ конвейер — всегда;
+      · ограничение стадии mechanical_dependency — всегда, даже если связь
+        всё равно умерла позже. Нерешённая механическая природа пары — это
+        состояние политики, а не свойство текущих чисел: если завтра
+        значимость появится, запрет должен уже лежать в журнале;
+      · отказ конкретному потребителю (гипотеза, рекомендация) — на той
+        стадии, где он реально что-то закрывает.
+    Ограничение стадии outlier_robustness своей записи не даёт: оно
+    проявляется отказом на стадиях 6-7 и дублировать его незачем.
+    """
     ins, blocked = [], []
     for a in sorted(assoc_rows, key=lambda x: (x["x_metric"], x["y_metric"])):
-        if a["status"] != "measured" or a["rho"] is None:
-            continue
-        # Механическая зависимость проверяется ПЕРВОЙ: связь, вытекающая из
-        # устройства метрик, не становится содержательной оттого, что она
-        # статистически сильна. Наоборот — чем она сильнее, тем очевиднее,
-        # что измеряется арифметика, а не аудитория.
-        allowed, code, dep = P.association_claim_allowed(a["x_metric"], a["y_metric"])
-        if not allowed:
+        x, y = a["x_metric"], a["y_metric"]
+        ev = pipeline.evaluate_association(a)
+        by_stage = {s["stage"]: s for s in ev["stages"]}
+
+        mech = by_stage.get("mechanical_dependency")
+        if mech and mech["verdict"] == "restrict":
             blocked.append(_blocked(
-                f"содержательный вывод о связи {a['x_metric']} и {a['y_metric']}",
-                "метрики связаны механически: " + dep["mechanism"] +
-                " Статистика сохранена как техническая величина. "
-                "Причинность не установлена.",
-                code,
-                {"rho": a["rho"], "p": a["p_two_sided"], "n": a["n"],
-                 "rule_id": dep["rule_id"], "evidence": dep["evidence"],
-                 "not_an_identity": dep["not_an_identity"],
-                 "forbidden": ["FACT", "HYPOTHESIS", "RECOMMENDATION",
-                               "content_dna_evidence", "experiment_basis"]}))
+                f"повышение связи {x} и {y} до рекомендации, доказательства "
+                "Content DNA или основания эксперимента",
+                "механическая природа пары не решена владельцем: "
+                + mech["detail"]["candidate_note"]
+                + " До решения статистическая значимость сама по себе "
+                "повышения не даёт. Причинность не установлена.",
+                mech["reason_code"], mech["detail"]))
+
+        if ev["stopped_at"]:
+            stop = by_stage[ev["stopped_at"]]
+            blocked.append(_blocked(*_stop_wording(x, y, stop),
+                                    stop["reason_code"], stop["detail"]))
             continue
 
-        # Связь, неотличимая от шума, гипотезой не становится: иначе список
-        # гипотез заполняется совпадениями и перестаёт что-либо значить.
-        if a["p_two_sided"] is None or a["p_two_sided"] > P.HYPOTHESIS_MAX_P:
+        if ev["allow"]["HYPOTHESIS"]:
+            direction = "обратная" if a["rho"] < 0 else "прямая"
+            competing = ("связь может быть следствием общей причины, обратного "
+                         "направления или свойства самих определений метрик; "
+                         "выборка одна и мала")
+            if ev["limitations"]:
+                competing += "; " + "; ".join(ev["limitations"])
+            ins.append(_insight(
+                "HYPOTHESIS",
+                f"В выборке n={a['n']} между {x} и {y} "
+                f"наблюдается {direction} ранговая связь rho={a['rho']:+.3f} "
+                f"(приближённая значимость p≈{a['p_two_sided']:.4f}). "
+                f"Связь может отражать общий источник или особенности метрик. "
+                f"Причинность не установлена.",
+                "analytics", n_sample=a["n"], competing_explanation=competing,
+                refs=[f"analytics/association.jsonl#{x}~{y}"]))
             blocked.append(_blocked(
-                f"гипотеза о связи {a['x_metric']} и {a['y_metric']}",
-                f"связь не выделяется из шума при n={a['n']} "
-                f"(rho={a['rho']:+.3f}, p≈{a['p_two_sided']:.3f} > "
-                f"{P.HYPOTHESIS_MAX_P})",
-                "not_distinguishable_from_noise",
-                {"rho": a["rho"], "p": a["p_two_sided"], "n": a["n"]}))
-            continue
-        direction = "обратная" if a["rho"] < 0 else "прямая"
-        ins.append(_insight(
-            "HYPOTHESIS",
-            f"В выборке n={a['n']} между {a['x_metric']} и {a['y_metric']} "
-            f"наблюдается {direction} ранговая связь rho={a['rho']:+.3f} "
-            f"(приближённая значимость p≈{a['p_two_sided']:.4f}). "
-            f"Связь может отражать общий источник или особенности метрик. "
-            f"Причинность не установлена.",
-            "analytics", n_sample=a["n"],
-            competing_explanation=(
-                "связь может быть следствием общей причины, обратного направления "
-                "или свойства самих определений метрик; выборка одна и мала"),
-            refs=[f"analytics/association.jsonl#{a['x_metric']}~{a['y_metric']}"]))
-        blocked.append(_blocked(
-            f"причинное утверждение о {a['x_metric']} и {a['y_metric']}",
-            "нет завершённого эксперимента", "no_concluded_experiment",
-            {"rho": a["rho"], "n": a["n"], "sample_status": a["sample_status"]}))
+                f"причинное утверждение о {x} и {y}",
+                "нет завершённого эксперимента", "no_concluded_experiment",
+                {"rho": a["rho"], "n": a["n"],
+                 "sample_status": a["sample_status"]}))
+        else:
+            d = ev["deny"]["HYPOTHESIS"]
+            blocked.append(_blocked(
+                f"гипотеза о связи {x} и {y}",
+                f"отказано на стадии {d['stage']}", d["reason_code"],
+                d["detail"]))
+
+        if not ev["allow"]["RECOMMENDATION"]:
+            d = ev["deny"]["RECOMMENDATION"]
+            blocked.append(_blocked(
+                f"рекомендация по связи {x} и {y}",
+                f"отказано на стадии {d['stage']}", d["reason_code"],
+                d["detail"]))
     return ins, blocked
+
+
+def _stop_wording(x, y, stop):
+    """Текст блокировки для стадии, остановившей конвейер."""
+    code, d = stop["reason_code"], stop["detail"]
+    if code == P.MECHANICAL_REASON_CODE:
+        return (f"содержательный вывод о связи {x} и {y}",
+                "метрики связаны механически: " + d["mechanism"] +
+                " Статистика сохранена как техническая величина. "
+                "Причинность не установлена.")
+    if code == pipeline.NOISE:
+        return (f"гипотеза о связи {x} и {y}",
+                f"связь не выделяется из шума при n={d['n']} "
+                f"(rho={d['rho']:+.3f}, p≈{d['p']:.3f} > {d['threshold']})")
+    if code == pipeline.INSUFFICIENT_SAMPLE:
+        return (f"любой вывод о связи {x} и {y}",
+                f"наблюдений {d['n']} при минимуме "
+                f"{d['min_n_for_association']} для измерения связи")
+    return (f"любой вывод о связи {x} и {y}",
+            f"связь не измерена: статус {d.get('status')!r}")
 
 
 # ── признаки и возраст ──────────────────────────────────────────────────────

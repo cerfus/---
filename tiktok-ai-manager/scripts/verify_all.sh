@@ -53,6 +53,8 @@ echo; echo "=== 11в. тесты Phase 5 (выводы и отчёт) ==="; pyth
 
 echo; echo "=== 11г. тесты Phase 5.1 (механическая зависимость) ==="; python3 tests/test_mechanical_dependency.py | tail -2
 
+echo; echo "=== 11д. регрессия Phase 5.1 hardening (A-G + порядок) ==="; python3 tests/test_phase51_hardening.py | tail -2
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6

@@ -39,7 +39,7 @@ SPEC = {
     "insights": ("run_id, content_hash",
                  {"insight_id", "account_id", "pattern_id", "experiment_id",
                   "superseded_by", "created_at"}),
-    "reports": ("report_type, period_start",
+    "reports": ("report_type, period_start, period_end, run_id",
                 {"report_id", "account_id", "generated_at"}),
     "system_capabilities": ("capability", set()),
     "publishing_queue": ("correlation_id", {"queue_id", "account_id", "script_id",

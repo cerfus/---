@@ -9,7 +9,7 @@
 """
 import re
 
-VALIDATOR_VERSION = "claim-validator-1.0.0"
+VALIDATOR_VERSION = "claim-validator-1.1.0"
 
 # Причинные конструкции. Запрещены в любом выводе, кроме опирающегося на
 # завершённый эксперимент.
@@ -32,6 +32,15 @@ CAUSAL_PATTERNS = [
     (r"\bresponsible\s+for\b", "responsible for"),
     (r"\bdrives?\b", "drives"),
     (r"\bbecause\s+of\b", "because of"),
+    # Формы, названные владельцем отдельно: «X increases Y», «X decreases Y»,
+    # «X results in Y». Русские аналоги (повышает / снижает) уже выше;
+    # английские нужны сами по себе — источники и заимствованные термины
+    # попадают в текст как есть.
+    (r"\bincreas(e|es|ed|ing)\b", "increases"),
+    (r"\bdecreas(e|es|ed|ing)\b", "decreases"),
+    (r"\bresults?\s+in\b", "results in"),
+    (r"\breduces?\b", "reduces"),
+    (r"\bboosts?\b", "boosts"),
 ]
 
 # Оценочные и рекомендательные конструкции: Phase 5 измеряет и описывает.
