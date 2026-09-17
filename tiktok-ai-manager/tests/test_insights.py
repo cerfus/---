@@ -151,10 +151,10 @@ def test_storage():
               cur.fetchone()[0] >= 1)
         cur.execute("SELECT count(*) FROM insights WHERE claim_type='FACT'")
         check("в базе нет ни одного FACT", cur.fetchone()[0] == 0)
-        cur.execute("SELECT count(*) FROM reports WHERE report_type='daily'")
-        check("ежедневный отчёт записан один раз", cur.fetchone()[0] == 1)
-        cur.execute("SELECT jsonb_array_length(blocked_conclusions) FROM reports LIMIT 1")
-        check("отчёт хранит заблокированные выводы",
+        cur.execute("SELECT count(*) FROM reports_current WHERE report_type='daily'")
+        check("текущий ежедневный отчёт один на период", cur.fetchone()[0] == 1)
+        cur.execute("SELECT jsonb_array_length(blocked_conclusions) FROM reports_current")
+        check("текущий отчёт хранит заблокированные выводы",
               cur.fetchone()[0] == len(blocked), str(len(blocked)))
 
     with psycopg.connect(config.dsn("rw"), autocommit=True) as c, c.cursor() as cur:

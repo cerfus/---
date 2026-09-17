@@ -35,8 +35,12 @@ def _insight(claim_type, statement, source_kind, n_sample=None,
     return body
 
 
-def _blocked(what, why, detail=None):
-    return {"conclusion": what, "reason": why, "detail": detail or {}}
+def _blocked(what, why, reason_code, detail=None):
+    """Заблокированный вывод. reason_code — машинная причина: последующие фазы
+    обязаны уметь отличать «мало данных» от «связь механическая» без разбора
+    человеческого текста."""
+    return {"conclusion": what, "reason": why, "reason_code": reason_code,
+            "detail": detail or {}}
 
 
 # ── качество данных из покрытия ─────────────────────────────────────────────
@@ -70,6 +74,7 @@ def from_coverage(coverage_rows):
         blocked.append(_blocked(
             f"FACT по метрике {r['metric']}",
             "часть наблюдений непригодна по статусу сверки",
+            "ineligible_reconciliation_status",
             {"metric": r["metric"], "eligible": r["eligible_observations"],
              "total": r["total_observations"],
              "untested": r["data_untested"], "unavailable": r["data_unavailable"],
@@ -104,7 +109,8 @@ def from_reconciliation(recon_rows):
         for r in disc:
             blocked.append(_blocked(
                 f"FACT по {r['metric']} для ролика {r['video_id']}",
-                "источники противоречат друг другу", {"status": "both_discrepancy"}))
+                "источники противоречат друг другу", "source_discrepancy",
+                {"status": "both_discrepancy"}))
     untested = [r for r in recon_rows if r["classification"] == "untested_overlap"]
     if untested:
         by_metric = {}
@@ -135,6 +141,7 @@ def from_sample_size(account_rows, n_videos):
         blocked.append(_blocked(
             "любой вывод уровня FACT по метрикам аккаунта",
             f"размер выборки n={n_videos} ниже порога {P.MIN_SAMPLE_FOR_FACT}",
+            "insufficient_sample",
             {"metrics": metrics, "n": n_videos,
              "needed": P.MIN_SAMPLE_FOR_FACT - n_videos}))
     for r in sorted(account_rows, key=lambda x: (x["window"], x["metric"])):
@@ -142,6 +149,7 @@ def from_sample_size(account_rows, n_videos):
             blocked.append(_blocked(
                 f"baseline окна {r['window']}",
                 "в выборке нет роликов этого возрастного бакета",
+                "no_videos_in_age_bucket",
                 {"window": r["window"], "age_bucket": r["age_bucket"]}))
     return ins, blocked
 
@@ -152,6 +160,25 @@ def from_associations(assoc_rows):
     for a in sorted(assoc_rows, key=lambda x: (x["x_metric"], x["y_metric"])):
         if a["status"] != "measured" or a["rho"] is None:
             continue
+        # Механическая зависимость проверяется ПЕРВОЙ: связь, вытекающая из
+        # устройства метрик, не становится содержательной оттого, что она
+        # статистически сильна. Наоборот — чем она сильнее, тем очевиднее,
+        # что измеряется арифметика, а не аудитория.
+        allowed, code, dep = P.association_claim_allowed(a["x_metric"], a["y_metric"])
+        if not allowed:
+            blocked.append(_blocked(
+                f"содержательный вывод о связи {a['x_metric']} и {a['y_metric']}",
+                "метрики связаны механически: " + dep["mechanism"] +
+                " Статистика сохранена как техническая величина. "
+                "Причинность не установлена.",
+                code,
+                {"rho": a["rho"], "p": a["p_two_sided"], "n": a["n"],
+                 "rule_id": dep["rule_id"], "evidence": dep["evidence"],
+                 "not_an_identity": dep["not_an_identity"],
+                 "forbidden": ["FACT", "HYPOTHESIS", "RECOMMENDATION",
+                               "content_dna_evidence", "experiment_basis"]}))
+            continue
+
         # Связь, неотличимая от шума, гипотезой не становится: иначе список
         # гипотез заполняется совпадениями и перестаёт что-либо значить.
         if a["p_two_sided"] is None or a["p_two_sided"] > P.HYPOTHESIS_MAX_P:
@@ -160,6 +187,7 @@ def from_associations(assoc_rows):
                 f"связь не выделяется из шума при n={a['n']} "
                 f"(rho={a['rho']:+.3f}, p≈{a['p_two_sided']:.3f} > "
                 f"{P.HYPOTHESIS_MAX_P})",
+                "not_distinguishable_from_noise",
                 {"rho": a["rho"], "p": a["p_two_sided"], "n": a["n"]}))
             continue
         direction = "обратная" if a["rho"] < 0 else "прямая"
@@ -177,7 +205,7 @@ def from_associations(assoc_rows):
             refs=[f"analytics/association.jsonl#{a['x_metric']}~{a['y_metric']}"]))
         blocked.append(_blocked(
             f"причинное утверждение о {a['x_metric']} и {a['y_metric']}",
-            "нет завершённого эксперимента",
+            "нет завершённого эксперимента", "no_concluded_experiment",
             {"rho": a["rho"], "n": a["n"], "sample_status": a["sample_status"]}))
     return ins, blocked
 
@@ -197,14 +225,14 @@ def from_features(feature_rows, n_videos):
         for name in unavailable:
             blocked.append(_blocked(
                 f"любой вывод о признаке {name}",
-                "нет источника данных для признака",
+                "нет источника данных для признака", "no_data_source",
                 {"feature": name}))
     insufficient = sorted({r["feature_name"] for r in feature_rows
                            if r["feature_status"] == "insufficient_baseline"})
     for name in insufficient:
         blocked.append(_blocked(
             f"признак {name}", "baseline недостаточен и включает сам ролик",
-            {"feature": name, "n": n_videos}))
+            "insufficient_baseline", {"feature": name, "n": n_videos}))
     buckets = sorted({r["feature_value"] for r in feature_rows
                       if r["feature_name"] == "age_bucket" and r["feature_value"]})
     if buckets == ["backfill"]:
@@ -216,18 +244,38 @@ def from_features(feature_rows, n_videos):
         blocked.append(_blocked(
             "любой вывод о поведении метрик в первые часы жизни ролика",
             "нет роликов моложе 24 часов; Phase 0 остаётся BLOCKED — DATA COVERAGE",
-            {"buckets_present": buckets}))
+            "phase0_data_coverage", {"buckets_present": buckets}))
     return ins, blocked
 
 
+# ── причинность ─────────────────────────────────────────────────────────────
+def from_causality(n_concluded_experiments):
+    """Постоянный запрет причинности.
+
+    Раньше блок о причинности выпускался на каждую измеренную связь. После
+    введения гейтов связи отсекаются раньше, и запрет пропадал ровно тогда,
+    когда гипотез не набралось. Но отсутствие гипотез не делает причинные
+    утверждения допустимыми — поэтому запрет объявляется безусловно.
+    """
+    if n_concluded_experiments > 0:
+        return [], []
+    return [], [_blocked(
+        "любое причинное утверждение о метриках аккаунта",
+        "ни один эксперимент не завершён; наблюдаемые связи причинности "
+        "не показывают",
+        "no_concluded_experiment",
+        {"concluded_experiments": n_concluded_experiments})]
+
+
 def generate_all(coverage_rows, recon_rows, account_rows, assoc_rows,
-                 feature_rows, n_videos):
+                 feature_rows, n_videos, n_concluded_experiments=0):
     ins, blocked = [], []
     for fn, args in ((from_coverage, (coverage_rows,)),
                      (from_reconciliation, (recon_rows,)),
                      (from_sample_size, (account_rows, n_videos)),
                      (from_associations, (assoc_rows,)),
-                     (from_features, (feature_rows, n_videos))):
+                     (from_features, (feature_rows, n_videos)),
+                     (from_causality, (n_concluded_experiments,))):
         i, b = fn(*args)
         ins += i
         blocked += b

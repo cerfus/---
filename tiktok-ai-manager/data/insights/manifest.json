@@ -4,10 +4,10 @@
     "features": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
     "reconciliation": "f52205acef19ba5082f192e7206ff9faa3917cde3be0e970f7afb4e0202506cf"
   },
-  "insights_hash": "fa54f1ce7274cc651a5ca7b1ddd5d6625064c234f21c3b6488438b8614977a5b",
-  "insights_run_id": "b3f72027-520e-59af-8819-0e1bf4ffc0db",
-  "n_blocked": 26,
-  "n_insights": 12,
+  "insights_hash": "3116598314dae15bd1302e94957940f459203a8f898575e3dd06c7834eeaff42",
+  "insights_run_id": "50b29176-8296-5b56-8cbe-c4b9d3ffe066",
+  "n_blocked": 27,
+  "n_insights": 11,
   "period": "2026-09-17",
   "policy_version": "insights-policy-1.0.0",
   "report_path": "reports/daily/2026-09-17.md"

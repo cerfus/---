@@ -97,7 +97,21 @@ def build(period, ins, blocked, account_rows, coverage_rows, experiments,
     L += [f"## {dict(P.DAILY_SECTIONS)['new_hypotheses']}", ""]
     hyps = by_type.get("HYPOTHESIS", [])
     if not hyps:
-        L += ["Новых гипотез нет.", ""]
+        # Пустой раздел обязан объяснить, почему он пуст: иначе читатель решит,
+        # что связи не измерялись.
+        cand = [b for b in blocked
+                if b.get("reason_code") in ("mechanically_dependent",
+                                            "not_distinguishable_from_noise")]
+        L += ["Новых гипотез нет."]
+        if cand:
+            mech = [b for b in cand if b["reason_code"] == "mechanically_dependent"]
+            noise = [b for b in cand if b["reason_code"] == "not_distinguishable_from_noise"]
+            L += ["",
+                  f"Кандидатов рассмотрено и отклонено: {len(cand)} "
+                  f"(механически зависимых пар — {len(mech)}, "
+                  f"неотличимых от шума — {len(noise)}). "
+                  "Основания в разделе 8."]
+        L += [""]
     for h in hyps:
         L += [f"* {h['statement']}",
               f"  * конкурирующее объяснение: {h['competing_explanation']}",
@@ -153,11 +167,17 @@ def build(period, ins, blocked, account_rows, coverage_rows, experiments,
         L += ["**Пусто — это подозрительно.** Отчёт без заблокированных выводов "
               "означает, что система не проверяла границы своих знаний.", ""]
     else:
+        codes = {}
+        for b in blocked:
+            codes[b.get("reason_code", "—")] = codes.get(b.get("reason_code", "—"), 0) + 1
         L += [f"Выводов, которые система могла бы сделать, но не имеет права: "
               f"**{len(blocked)}**.", "",
-              "| Вывод | Почему заблокирован |", "|---|---|"]
+              "По машинным причинам: " +
+              ", ".join(f"`{k}` — {v}" for k, v in sorted(codes.items())), "",
+              "| Вывод | Причина (код) | Почему заблокирован |", "|---|---|---|"]
         for b in blocked:
-            L.append(f"| {b['conclusion']} | {b['reason']} |")
+            L.append(f"| {b['conclusion']} | `{b.get('reason_code', '—')}` "
+                     f"| {b['reason']} |")
         L += [""]
 
     L += ["---", "",
