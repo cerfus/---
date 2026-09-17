@@ -669,7 +669,7 @@ async def разбор(запрос: CallbackQuery, state: FSMContext):
         return
 
     await _убрать(думаю)
-    await _послать(запрос.message, analysis.текст_разбора(разбор_ии))
+    await _послать(запрос.message, analysis.текст_разбора(разбор_ии, рамка))
     await _послать(запрос.message, texts.ГОТОВО, кнопки=КНОПКИ_ПОСЛЕ_РАЗБОРА)
 
 

@@ -400,3 +400,16 @@ textarea:focus, input:focus { outline: 2px solid var(--полоска); outline-
   width: 100%;
   margin-bottom: .5rem;
 }
+
+/* Модель возразила рамке: цифры мерили не то. Не тревога и не ошибка —
+   поэтому рамка приглушённая, а не красная. */
+.возражение {
+  margin: 1rem 0;
+  padding: .9rem 1.1rem;
+  border: 1px solid var(--край);
+  border-left: 3px solid var(--полоска);
+  border-radius: 10px;
+  background: var(--фон);
+}
+
+.возражение p { margin: .4rem 0; }
