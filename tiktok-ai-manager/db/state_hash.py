@@ -40,6 +40,15 @@ SPEC = {
                                             "experiment_id", "supersedes_queue_id"}),
     "publishing_history": ("correlation_id, occurred_at", {"history_id",
                                                            "publishing_queue_id"}),
+    # run_id этих таблиц ДЕТЕРМИНИРОВАН (uuid5 от хеша содержимого), поэтому
+    # он остаётся в слепке и сам служит доказательством воспроизводимости.
+    # computed_at — момент записи, он закономерно различается и исключён.
+    "reconciliation_results": ("video_id, metric, slice_key",
+                               {"result_id", "computed_at"}),
+    "analytics_video_baseline": ("video_id", {"id", "computed_at"}),
+    "analytics_account_baseline": ("window_name, metric", {"id", "computed_at"}),
+    "analytics_coverage": ("scope, metric NULLS FIRST", {"id", "computed_at"}),
+    "analytics_association": ("x_metric, y_metric", {"id", "computed_at"}),
 }
 
 

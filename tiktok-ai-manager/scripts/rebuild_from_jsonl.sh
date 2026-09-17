@@ -18,3 +18,5 @@ su postgres -c "psql -v ON_ERROR_STOP=1 -d ${DB} -c 'REVOKE CREATE ON SCHEMA pub
 cd "${ROOT}"
 python3 db/migrate.py
 python3 db/load.py
+python3 reconcile/run.py --load | tail -1
+python3 analytics/run.py --load | tail -1
