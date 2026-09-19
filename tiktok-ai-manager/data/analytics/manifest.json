@@ -1,0 +1,12 @@
+{
+  "analytics_hash": "52fa355f77987c7aa8479e18a89616cd6c2b8e36dfaf49c477e2eca7b35d474f",
+  "analytics_run_id": "72a1f327-add4-5bd6-8e34-9300ac873c0f",
+  "counts": {
+    "association": 4,
+    "baseline_account": 60,
+    "baseline_video": 16,
+    "coverage": 12
+  },
+  "engine_version": "analytics-engine-1.0.0",
+  "policy_version": "analytics-policies-1.0.0"
+}

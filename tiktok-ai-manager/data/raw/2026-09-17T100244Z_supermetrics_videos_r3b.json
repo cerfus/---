@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "schema": "raw/v1", "round": "R3b", "run_id": "exp004-r3b",
+    "fetched_at": "2026-09-17T10:03:05Z",
+    "observed_at_source": "2026-09-17T10:02:44Z",
+    "observed_at_authority": "cache_time от источника — момент актуальности данных, точнее нашей метки получения",
+    "source": "supermetrics", "tool": "data_query",
+    "request": {"ds_id": "TIKBA", "settings": {"report_type": "videos"},
+      "fields": ["videos__video_id","videos__video_views","videos__reach","videos__total_time_watched_sec","videos__favorites","videos__share_url"],
+      "max_rows": 200},
+    "schedule_id": "df901f210dd396f81c139ad369085023f2c7c2d6b4caf473541a2606ff3d55e0",
+    "cache_used": true, "cache_time": "2026-09-17T10:02:44+00:00",
+    "source_note": "Served from the platform's result cache as of 2026-09-17T10:02:44+00:00, not read live. A change made after that time will not appear yet.",
+    "usable_as_observation": true,
+    "purpose": "Проверка гипотезы кэша: изменённый набор полей -> новый schedule_id -> данные с явной меткой актуальности",
+    "row_count": 16
+  },
+  "header": ["video_id","share_url","views","reach","total_time_watched_sec","favorites"],
+  "rows": [
+    ["7638406599832341793","https://www.tiktok.com/@gulyashik52/video/7638406599832341793",698889,643160,5243566,1546],
+    ["7643545925926915360","https://www.tiktok.com/@gulyashik52/video/7643545925926915360",168511,157289,904911,452],
+    ["7651785569323863329","https://www.tiktok.com/@gulyashik52/video/7651785569323863329",4640,4016,30586,97],
+    ["7683780392029015328","https://www.tiktok.com/@gulyashik52/video/7683780392029015328",2735,2426,11709,12],
+    ["7636554591160519969","https://www.tiktok.com/@gulyashik52/video/7636554591160519969",1587,1281,8866,4],
+    ["7669369589641366817","https://www.tiktok.com/@gulyashik52/video/7669369589641366817",1436,1088,17486,5],
+    ["7650987964817788192","https://www.tiktok.com/@gulyashik52/video/7650987964817788192",1434,1135,9795,4],
+    ["7637497223835667744","https://www.tiktok.com/@gulyashik52/video/7637497223835667744",1229,815,5853,3],
+    ["7653084183916547360","https://www.tiktok.com/@gulyashik52/video/7653084183916547360",1210,870,6139,4],
+    ["7675678282561375520","https://www.tiktok.com/@gulyashik52/video/7675678282561375520",1127,934,7730,30],
+    ["7658223227226950944","https://www.tiktok.com/@gulyashik52/video/7658223227226950944",1059,755,5345,3],
+    ["7683970036201049376","https://www.tiktok.com/@gulyashik52/video/7683970036201049376",851,758,6089,5],
+    ["7628289075081956640","https://www.tiktok.com/@gulyashik52/video/7628289075081956640",819,516,4228,4],
+    ["7682248932327476513","https://www.tiktok.com/@gulyashik52/video/7682248932327476513",504,427,3251,3],
+    ["7681976167829654816","https://www.tiktok.com/@gulyashik52/video/7681976167829654816",400,343,2316,3],
+    ["7681842224602123553","https://www.tiktok.com/@gulyashik52/video/7681842224602123553",382,322,2389,4]
+  ]
+}
