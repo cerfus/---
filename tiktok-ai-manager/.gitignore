@@ -12,6 +12,10 @@ data/assets/incoming/*
 !data/assets/incoming/.gitkeep
 config/settings.toml
 
+# журнал обращений мобильного пульта: операционная телеметрия с
+# Telegram-идентификаторами, в репозиторий не кладётся
+data/mobile/
+
 # секреты: отрицание ДОЛЖНО идти после правил, которые оно отменяет
 .env
 .env.*

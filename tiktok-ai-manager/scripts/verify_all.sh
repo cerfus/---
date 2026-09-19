@@ -63,6 +63,11 @@ echo; echo "=== 11д. регрессия Phase 5.1 hardening (A-G + порядо
 
 echo; echo "=== 11е. тесты Phase 6 (ассеты и Tier 1) ==="; python3 tests/test_phase6_assets.py | tail -2
 
+echo; echo "=== 11ж. тесты Phase 6.5 (мобильный пульт) ==="; python3 tests/test_phase65_mobile.py | tail -2
+
+echo; echo "=== 11з. стартовая проверка Telegram (без запуска опроса) ==="
+python3 -m mobile.telegram --check | sed 's/^/  /'
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6
