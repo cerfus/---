@@ -290,7 +290,6 @@
   },
   "extractor_version": "tier1-probe-1.0.0+cv2=5.0.0+numpy=2.4.6+ffmpeg=7.0.2-static",
   "feature_fill_rate": 0.0,
-  "generated_at": "2026-09-19T09:06:44.257574+00:00",
   "hashes": {
     "asset": "d1de44f5d95543676e252d57481f241b38aab2e9f463804c924df8679cbb3ea7",
     "tier1": "d1ca25c17ec6993e5d8618a17bfafa0b3044bb87a939880a862f2533b8a6d4a3"

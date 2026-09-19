@@ -22,6 +22,7 @@ from mobile import config as mobile_config
 from mobile import formatters as F
 from mobile import router
 from mobile import service as S
+from mobile import verify as MV
 
 RESULTS = []
 OWNER = 424242
@@ -420,6 +421,83 @@ def test_H_duplicate_update():
           not led.seen(1) and led.seen(3))
 
 
+# ══════════════════════════════════════════════════════════════════════ I
+def test_I_preflight_semantics():
+    """I. Стартовая проверка оценивается ПО СМЫСЛУ, а не по коду возврата.
+
+    Регрессия на ISSUE-2: шаг сборки обрывался, потому что --check честно
+    отказывал при выключенной интеграции. Подавить код возврата через
+    «|| true» нельзя — это погасило бы и настоящую поломку.
+    """
+    print("\nI — семантика стартовой проверки")
+    disabled = mobile_config.MobileConfig(
+        reason=mobile_config.DISABLED_NO_TOKEN)
+    enabled = cfg_enabled()
+    DIS_OUT = mobile_config.DISABLED_NO_TOKEN + "\nPreflight only."
+
+    # ветка 1: Telegram не настроен -> сборка продолжается
+    ok, verdict, _ = MV.evaluate(disabled, 1, DIS_OUT)
+    check("I1 выключено + ожидаемый отказ -> проверка продолжается",
+          ok is True and verdict == MV.VERDICT_DISABLED_OK, verdict)
+
+    # ветка 2: Telegram настроен и проверка прошла -> продолжается
+    ok, verdict, _ = MV.evaluate(enabled, 0, "Telegram integration: ENABLED")
+    check("I2 настроено + успех -> проверка продолжается",
+          ok is True and verdict == MV.VERDICT_ENABLED_OK, verdict)
+
+    # ветка 3: неожиданный отказ -> сборка ПАДАЕТ
+    ok, verdict, _ = MV.evaluate(enabled, 1, "Aborting: database unreachable")
+    check("I3 настроено + отказ -> проверка ПАДАЕТ",
+          ok is False and verdict == MV.VERDICT_ENABLED_FAILED, verdict)
+
+    ok, verdict, _ = MV.evaluate(
+        disabled, 1, "Traceback (most recent call last): ZeroDivisionError")
+    check("I4 выключено + отказ без объяснения -> ПАДАЕТ (не маскируем)",
+          ok is False and verdict == MV.VERDICT_UNEXPECTED_FAILURE, verdict)
+
+    ok, verdict, _ = MV.evaluate(disabled, 0, "Telegram integration: ENABLED")
+    check("I5 выключено, но проверка отрапортовала успех -> ПАДАЕТ",
+          ok is False and verdict == MV.VERDICT_DISABLED_BUT_SUCCEEDED, verdict)
+
+    other = mobile_config.MobileConfig(reason=mobile_config.DISABLED_NO_OWNER)
+    ok, verdict, _ = MV.evaluate(other, 1, DIS_OUT)
+    check("I6 причина отказа не совпала с окружением -> ПАДАЕТ",
+          ok is False and verdict == MV.VERDICT_UNEXPECTED_FAILURE, verdict)
+
+    check("I7 успешных вердиктов ровно два",
+          set(MV.OK_VERDICTS) == {MV.VERDICT_ENABLED_OK, MV.VERDICT_DISABLED_OK})
+
+    # настоящий подпроцесс в текущем окружении
+    ok, verdict, _, code, out = MV.run_check()
+    cfg_now = mobile_config.load()
+    expected = MV.VERDICT_ENABLED_OK if cfg_now.enabled else MV.VERDICT_DISABLED_OK
+    check("I8 реальный --check соответствует окружению",
+          ok is True and verdict == expected, f"{verdict} (exit {code})")
+    check("I9 вывод называет состояние интеграции",
+          ("ENABLED" in out) if cfg_now.enabled
+          else (MV.EXPECTED_DISABLED_PREFIX in out), out.splitlines()[:1])
+    check("I10 модуль завершается нулём при ожидаемом состоянии",
+          MV.main() == 0)
+
+    # подменный runner: обе ветки прогоняются сквозь run_check
+    ok, verdict, _, _, _ = MV.run_check(cfg=enabled, runner=lambda: (0, "ENABLED"))
+    check("I11 run_check пропускает настроенную интеграцию", ok is True)
+    ok, verdict, _, _, _ = MV.run_check(cfg=enabled, runner=lambda: (3, "boom"))
+    check("I12 run_check валит неожиданный отказ",
+          ok is False and verdict == MV.VERDICT_ENABLED_FAILED, verdict)
+
+    # сам скрипт сборки не должен глушить код возврата
+    sh = (ROOT / "scripts" / "verify_all.sh").read_text(encoding="utf-8")
+    mobile_lines = [l for l in sh.splitlines() if "mobile." in l]
+    check("I13 шаг сборки вызывает семантическую проверку",
+          any("mobile.verify" in l for l in mobile_lines), str(mobile_lines))
+    check("I14 код возврата не подавлен через «|| true»",
+          not any("|| true" in l for l in mobile_lines), str(mobile_lines))
+    check("I15 сырой --check в сборке не вызывается напрямую",
+          not any("mobile.telegram" in l and "--check" in l
+                  for l in mobile_lines), str(mobile_lines))
+
+
 def _raises(fn, exc):
     try:
         fn()
@@ -434,7 +512,8 @@ if __name__ == "__main__":
     for fn in (test_A_authorization, test_B_command_routing,
                test_C_no_mutation, test_D_publishing_safety,
                test_E_error_handling, test_F_secret_safety,
-               test_G_deterministic_output, test_H_duplicate_update):
+               test_G_deterministic_output, test_H_duplicate_update,
+               test_I_preflight_semantics):
         fn()
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

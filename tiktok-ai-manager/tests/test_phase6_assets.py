@@ -870,6 +870,65 @@ def test_M_local_ingestion_workflow():
           list(assets_run.scan_incoming()["matched"]) == [])
 
 
+# ══════════════════════════════════════════════════════════════════════ N
+def test_N_coverage_determinism():
+    """N. Отчёт о покрытии не меняется от самого факта запуска.
+
+    Регрессия на ISSUE-3: coverage.json нёс generated_at и пачкал рабочее
+    дерево при каждом прогоне — дифф без содержания, из-за которого
+    «ничего не изменилось» переставало отличаться от «изменилось».
+    """
+    print("\nN — детерминированность отчёта о покрытии")
+    path = ING.COVERAGE_JSON
+    check("N1 отчёт о покрытии существует", path.exists(), str(path.name))
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    VOLATILE = ("generated_at", "timestamp", "created_at", "run_at", "now")
+    present = [k for k in VOLATILE if k in data]
+    check("N2 в отчёте нет полей с моментом запуска", not present, str(present))
+
+    blob = path.read_text(encoding="utf-8")
+    check("N3 и во вложенных структурах тоже",
+          not any(f'"{k}"' in blob for k in VOLATILE),
+          str([k for k in VOLATILE if f'"{k}"' in blob]))
+
+    # ГЛАВНОЕ требование: два прогона подряд не меняют файл ни на байт
+    before = path.read_bytes()
+    ING.run(load=False, verbose=False)
+    after_first = path.read_bytes()
+    ING.run(load=False, verbose=False)
+    after_second = path.read_bytes()
+    check("N4 первый повторный прогон не изменил отчёт",
+          before == after_first,
+          "совпал" if before == after_first else "РАЗОШЁЛСЯ")
+    check("N5 второй повторный прогон не изменил отчёт",
+          after_first == after_second,
+          "совпал" if after_first == after_second else "РАЗОШЁЛСЯ")
+    check("N6 markdown-отчёт тоже воспроизводим",
+          ING.COVERAGE_MD.exists()
+          and "VIDEO_ASSET_STATUS" in ING.COVERAGE_MD.read_text(encoding="utf-8"))
+
+    # Наблюдаемость не потеряна — время лежит отдельно и вне git
+    check("N7 момент прогона записан в runtime-файл",
+          ING.RUNTIME_LAST_RUN.exists(), str(ING.RUNTIME_LAST_RUN.name))
+    rt = json.loads(ING.RUNTIME_LAST_RUN.read_text(encoding="utf-8"))
+    check("N8 runtime-файл несёт generated_at",
+          "generated_at" in rt and rt["generated_at"].endswith("+00:00"),
+          rt.get("generated_at", "-"))
+    check("N9 runtime-файл несёт хеши прогона",
+          rt.get("asset_hash") and rt.get("tier1_hash"))
+    check("N10 runtime-каталог игнорируется git",
+          subprocess.run(["git", "check-ignore", "-q",
+                          str(ING.RUNTIME_DIR)], cwd=str(ROOT)).returncode == 0)
+
+    # git подтверждает: отчёт не числится изменённым после повторов
+    r = subprocess.run(["git", "status", "--porcelain", "--",
+                        str(path.relative_to(ROOT))],
+                       cwd=str(ROOT), capture_output=True, text=True)
+    check("N11 git не считает отчёт изменённым после повторных прогонов",
+          r.stdout.strip() == "", r.stdout.strip() or "чисто")
+
+
 if __name__ == "__main__":
     built = build_fixtures()
     print(f"инструменты промера: " + ", ".join(
@@ -882,7 +941,8 @@ if __name__ == "__main__":
                test_I_deterministic_extraction,
                test_J_missing_video_no_fabrication,
                test_K_phase51_guards_intact, test_L_publishing_disabled,
-               test_M_local_ingestion_workflow):
+               test_M_local_ingestion_workflow,
+               test_N_coverage_determinism):
         fn()
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

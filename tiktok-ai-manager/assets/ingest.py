@@ -36,6 +36,14 @@ from features import visual_run as tier1_run
 COVERAGE_MD = ROOT / "data" / "features_tier1" / "coverage.md"
 COVERAGE_JSON = ROOT / "data" / "features_tier1" / "coverage.json"
 
+# Момент прогона живёт ОТДЕЛЬНО от отчёта о покрытии и вне git.
+# Причина: coverage.json коммитится, а метка времени менялась при каждом
+# запуске и пачкала рабочее дерево — дифф без содержания, ложные тревоги
+# хуков и невозможность отличить «ничего не изменилось» от «изменилось».
+# Наблюдаемость при этом не теряется: время остаётся здесь.
+RUNTIME_DIR = ROOT / "data" / "runtime"
+RUNTIME_LAST_RUN = RUNTIME_DIR / "ingest_last_run.json"
+
 # Состояние покрытия ассетами. Ровно три значения, и они не смешиваются:
 # «ни одного файла» и «часть файлов» — разные ситуации для планирования.
 STATUS_AVAILABLE = "AVAILABLE"
@@ -244,16 +252,32 @@ def run(load=False, verbose=True):
     # ── 9. покрытие ─────────────────────────────────────────────────────
     cov = coverage(videos, assets, rows)
     hashes = {"asset": ah, "tier1": th}
+    scan_serialised = {
+        k: (sorted(v) if isinstance(v, list) else
+            {kk: [str(x) for x in vv] if isinstance(vv, list) else str(vv)
+             for kk, vv in v.items()})
+        for k, v in scan.items()}
+
+    # Детерминированный артефакт: при неизменных данных байт в байт тот же.
     COVERAGE_JSON.parent.mkdir(parents=True, exist_ok=True)
     COVERAGE_JSON.write_text(json.dumps(
-        {**cov, "hashes": hashes, "incoming_scan":
-            {k: (sorted(v) if isinstance(v, list) else
-                 {kk: [str(x) for x in vv] if isinstance(vv, list) else str(vv)
-                  for kk, vv in v.items()})
-             for k, v in scan.items()},
-         "generated_at": datetime.now(timezone.utc).isoformat()},
+        {**cov, "hashes": hashes, "incoming_scan": scan_serialised},
         ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     COVERAGE_MD.write_text(coverage_markdown(cov, hashes, scan), encoding="utf-8")
+
+    # Наблюдаемость: когда прогон был и что получилось. Вне git.
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    RUNTIME_LAST_RUN.write_text(json.dumps({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "asset_hash": ah, "tier1_hash": th,
+        "asset_run_id": a_run, "tier1_run_id": t_run,
+        "video_asset_status": cov["video_asset_status"],
+        "n_assets_added": len(added),
+        "n_features_with_value": cov["n_features_with_value"],
+        "n_feature_rows": cov["n_feature_rows"],
+        "evidence_ok": evidence_ok, "deterministic": det_ok,
+        "n_problems": len(problems),
+    }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     say(f"\n[9] покрытие: со значением {cov['n_features_with_value']} из "
         f"{cov['n_feature_rows']} "
         f"({100 * (cov['feature_fill_rate'] or 0):.1f}%); "
