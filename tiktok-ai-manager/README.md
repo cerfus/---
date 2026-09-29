@@ -50,6 +50,20 @@ python3 db/load.py                  # JSONL -> PostgreSQL
 bash scripts/verify_all.sh          # пересборка с нуля + все тесты
 ```
 
+### Windows, без WSL
+
+```cmd
+scripts\migrate.bat --adopt         REM миграции (idempotent)
+scripts\verify_all.bat              REM все проверки, БД не пересоздаётся
+```
+
+Логика живёт в `scripts\verify_all.py` и одинакова на обеих системах;
+`.bat` только находит Python и включает UTF-8. Шаг пересборки БД требует
+`DROP DATABASE`, на который роли проекта не имеют права (в 0001 они
+созданы с `NOCREATEDB`), поэтому он запрашивается явно —
+`scripts\verify_all.bat --rebuild` при заданном `TIKTOK_DSN_SUPER`. Без
+запроса шаг помечается **ПРОПУЩЕН** и за пройденный не выдаётся.
+
 **PostgreSQL источником истины не является.** База пересобирается из
 `data/*.jsonl` командой `scripts/rebuild_from_jsonl.sh`, и слепок состояния
 после пересборки обязан совпасть побайтово.

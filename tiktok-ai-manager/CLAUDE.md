@@ -302,7 +302,14 @@ JSONL — источник истины, PostgreSQL пересобирается
    — раскладка сырья в JSONL.
 3. `python3 reconcile/run.py` → `analytics/run.py` → `features/run.py` →
    `insights/run.py` — сверка, статистика, признаки, выводы и отчёт.
-   Полная проверка с пересборкой БД с нуля: `bash scripts/verify_all.sh`.
+   Полная проверка: `bash scripts/verify_all.sh` (Linux, с пересборкой БД
+   с нуля) либо `scripts\verify_all.bat` (Windows, без пересборки).
+
+   Пересборка требует `DROP DATABASE`, а роли проекта созданы в 0001 с
+   `NOCREATEDB` и выполнить её не могут. Поэтому в переносимом варианте
+   она запрашивается явно — `scripts\verify_all.bat --rebuild` при
+   заданном `TIKTOK_DSN_SUPER`, — а без запроса шаг помечается
+   **ПРОПУЩЕН**, но никогда не выдаётся за пройденный.
 4. Интерпретация → `content/dna.md`, с маркировкой и ссылкой на цифры.
 5. Гипотезы → `experiments/register.jsonl` до публикации, а не после.
 6. Коммит. Данные существуют, только если закоммичены.
