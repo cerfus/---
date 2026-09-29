@@ -21,6 +21,9 @@ bash scripts/rebuild_from_jsonl.sh >/dev/null
 S2=$(python3 db/state_hash.py | tail -1 | awk '{print $NF}')
 [ "$S1" = "$S2" ] && echo "  REBUILD INVARIANT: PASS ${S1:0:24}…" || { echo "  FAIL"; exit 1; }
 
+echo; echo "=== 3б. схема соответствует миграциям ==="
+python3 db/verify_schema.py | tail -2 | sed 's/^/  /'
+
 echo; echo "=== 4. сверка источников ==="
 R1=$(python3 reconcile/run.py --load | grep content_hash | awk '{print $2}')
 R2=$(python3 reconcile/run.py | grep content_hash | awk '{print $2}')
