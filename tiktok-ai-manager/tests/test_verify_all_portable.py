@@ -71,6 +71,46 @@ def code_only(src):
     return " ".join(out)
 
 
+SPAWNERS = {"run", "Popen", "call", "check_call", "check_output"}
+
+
+def executables_invoked(src):
+    """Чем именно запускаются дочерние процессы.
+
+    Искать слово «python3» вхождением подстроки нельзя: строка
+    `#!/usr/bin/env python3` — это shebang, адресованный ядру при прямом
+    запуске файла, а не вызов интерпретатора из кода. Подстрока их не
+    различает, и проверка ложно срабатывала на собственной первой строке
+    драйвера. Поэтому у каждого subprocess-вызова берётся первый элемент
+    списка аргументов — то самое, что станет исполняемым файлом.
+    """
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+        if name not in SPAWNERS:
+            continue
+        first = node.args[0]
+        if isinstance(first, (ast.List, ast.Tuple)) and first.elts:
+            first = first.elts[0]
+        out.append(first)
+    return out
+
+
+def describes_sys_executable(node):
+    """Узел вида sys.executable."""
+    return (isinstance(node, ast.Attribute) and node.attr == "executable"
+            and isinstance(node.value, ast.Name) and node.value.id == "sys")
+
+
+def literal_of(node):
+    """Строковая константа узла либо None."""
+    return node.value if isinstance(node, ast.Constant) and isinstance(
+        node.value, str) else None
+
+
 def function_source(src, name):
     """Текст одной функции — чтобы проверить именно её охрану."""
     tree = ast.parse(src)
@@ -198,8 +238,23 @@ def main():
           f"всего {py_code.count(chr(34) + 'bash' + chr(34))}")
     check("F1b вызов bash закрыт проверкой на Windows",
           'os.name != "nt"' in ensure)
-    check("F2 используется текущий интерпретатор, а не python3",
-          "sys.executable" in py_code and "python3" not in py_code)
+    # F2 смотрит на исполняемые вызовы, а не на текст файла: shebang в
+    # первой строке — не запуск интерпретатора и в расчёт не берётся
+    execs = executables_invoked(py_text)
+    py_runners = [e for e in execs if describes_sys_executable(e)]
+    hardcoded = [literal_of(e) for e in execs if literal_of(e)]
+    check("F2a дочерний Python берётся из sys.executable",
+          len(py_runners) >= 1, f"таких вызовов: {len(py_runners)}")
+    check("F2b python3 как исполняемый файл не вызывается",
+          "python3" not in hardcoded, str(hardcoded))
+    check("F2c python тоже не зашит строкой",
+          "python" not in hardcoded, str(hardcoded))
+    first_line = py_text.lstrip("﻿").splitlines()[0]
+    py3_lines = [i for i, l in enumerate(py_text.splitlines(), 1)
+                 if "python3" in l]
+    check("F2d python3 встречается только в shebang",
+          py3_lines in ([], [1]) and first_line.startswith("#!"),
+          f"строки: {py3_lines}")
     check("F3 нет вызовов sed/grep/awk/sha256sum",
           not any(w in py_code for w in ("sha256sum", "sed ", "awk", "grep")),
           "проверено по коду без комментариев")
@@ -248,11 +303,21 @@ def main():
         with contextlib.redirect_stdout(io.StringIO()):
             return fn()
 
+    # Отказ соединения изображается подменой psycopg.connect, а НЕ
+    # заведомо мёртвым адресом. Живого сокета тут быть не должно: на
+    # Linux порт 1 отвечает отказом за 2 мс, а на Windows обращение к
+    # закрытому порту может висеть до таймаута стека — из-за этого шаг
+    # 11и и замирал. Подмена делает опыт мгновенным и одинаковым всюду.
+    import psycopg as _pg
+
+    def refuse(*a, **k):
+        raise _pg.OperationalError("проверочный отказ: база недоступна")
+
     saved_os = va.os
     saved_run = va.subprocess.run
-    saved_dsn = _os.environ.get("TIKTOK_DSN_RO")
+    saved_connect = _pg.connect
     try:
-        _os.environ["TIKTOK_DSN_RO"] = "postgresql://no:no@127.0.0.1:1/none"
+        _pg.connect = refuse
         va.subprocess.run = fake_run
 
         va.os = OsWithName(saved_os, "nt")
@@ -273,11 +338,50 @@ def main():
     finally:
         va.os = saved_os
         va.subprocess.run = saved_run
-        if saved_dsn is None:
-            _os.environ.pop("TIKTOK_DSN_RO", None)
-        else:
-            _os.environ["TIKTOK_DSN_RO"] = saved_dsn
+        _pg.connect = saved_connect
         va.RESULTS.clear()
+
+    print("\n=== H. зависший шаг снимается, проверка идёт дальше ===")
+    check("H1 у дочерних запусков есть потолок времени",
+          "timeout=limit" in py_text and "TimeoutExpired" in py_text)
+    check("H2 потолок задан с запасом к самому тяжёлому шагу",
+          va.STEP_TIMEOUT_SEC >= 120, f"{va.STEP_TIMEOUT_SEC} с")
+
+    import tempfile
+    hang = Path(tempfile.mkdtemp()) / "hang.py"
+    hang.write_text("import time\nprint('поехали')\ntime.sleep(600)\n",
+                    encoding="utf-8")
+
+    started = __import__("time").time()
+    rc, out = va.run(str(hang), timeout=2)
+    spent = __import__("time").time() - started
+    check("H3 зависший процесс снимается, а не ждётся вечно",
+          rc == va.RC_TIMEOUT and spent < 60, f"код {rc}, {spent:.1f} с")
+    check("H4 накопленный вывод сохраняется", "поехали" in out)
+    check("H5 таймаут объясняется словами, а не кодом 124",
+          "таймаут" in va.rc_detail(va.RC_TIMEOUT).lower()
+          or "не уложился" in va.rc_detail(va.RC_TIMEOUT))
+
+    # Главное: после снятого шага проверка продолжается, а не падает.
+    # Потолок на время опыта опускается до 2 с — иначе сам тест ждал бы
+    # штатные 600 и воспроизвёл бы ровно ту беду, которую проверяет.
+    good = hang.parent / "ok.py"
+    good.write_text("print('проверок: 1 | провалов: 0')\n", encoding="utf-8")
+    saved_limit = va.STEP_TIMEOUT_SEC
+    va.RESULTS.clear()
+    try:
+        va.STEP_TIMEOUT_SEC = 2
+        with contextlib.redirect_stdout(io.StringIO()):
+            stuck = va.script_step("H", "зависающий шаг", [str(hang)])
+            nxt = va.script_step("H+", "следующий шаг", [str(good)])
+    finally:
+        va.STEP_TIMEOUT_SEC = saved_limit
+    check("H6 снятый шаг — это FAIL",
+          stuck is False and va.RESULTS[0][2] == va.FAIL, str(va.RESULTS[0][3]))
+    check("H7 после снятого шага выполняется следующий",
+          nxt is True and len(va.RESULTS) == 2,
+          f"шагов записано: {len(va.RESULTS)}")
+    va.RESULTS.clear()
 
     failed = [n for n, ok in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

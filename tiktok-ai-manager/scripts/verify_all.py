@@ -87,12 +87,46 @@ def scrub_text(text):
         return config.redact(text)
 
 
-def run(*args):
-    """Запуск текущим интерпретатором. Возвращает (код, очищенный вывод)."""
-    proc = subprocess.run(
-        [sys.executable, *args], cwd=str(ROOT), env=child_env(),
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        encoding="utf-8", errors="replace")
+# Потолок времени на один дочерний шаг. Самый тяжёлый из нынешних —
+# тесты Phase 6, около 15 секунд, так что запас сорокакратный и по
+# здоровому шагу он не ударит. Меняется через окружение, если понадобится.
+STEP_TIMEOUT_SEC = int(os.environ.get("TIKTOK_STEP_TIMEOUT_SEC", "600"))
+RC_TIMEOUT = 124                     # тот же код, что возвращает GNU timeout
+
+
+def rc_detail(rc):
+    """Человеческое объяснение ненулевого кода возврата."""
+    if rc == RC_TIMEOUT:
+        return f"шаг не уложился в {STEP_TIMEOUT_SEC} с и был снят"
+    return f"код возврата {rc}"
+
+
+def run(*args, timeout=None):
+    """Запуск текущим интерпретатором. Возвращает (код, очищенный вывод).
+
+    Потолок времени обязателен. Без него один заблокировавшийся дочерний
+    процесс останавливает всю проверку насовсем: отчёт не доходит ни до
+    publishing.submit, ни до итоговой строки, и человек видит замерший
+    экран вместо провала. Это та же беда, что и с set -e в ISSUE-2 —
+    проверка молча не доводится до конца, — только ещё тише, потому что
+    здесь нет даже кода возврата.
+
+    Снятый по таймауту шаг — провал (RC_TIMEOUT), и остальные шаги
+    продолжают выполняться. Уже накопленный вывод сохраняется: по нему
+    видно, на чём именно шаг встал.
+    """
+    limit = STEP_TIMEOUT_SEC if timeout is None else timeout
+    try:
+        proc = subprocess.run(
+            [sys.executable, *args], cwd=str(ROOT), env=child_env(),
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace", timeout=limit)
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.output or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", "replace")
+        return RC_TIMEOUT, scrub_text(
+            f"{partial}\n[снято по таймауту: {limit} с]")
     return proc.returncode, scrub_text(proc.stdout or "")
 
 
@@ -153,11 +187,11 @@ def determinism(step, title, args, needle, idx, label):
     rc1, out1 = run(*args, "--load")
     if rc1 != 0:
         print(indent(tail(out1, 15)))
-        return record(step, title, FAIL, f"первый запуск вернул {rc1}")
+        return record(step, title, FAIL, f"первый запуск: {rc_detail(rc1)}")
     rc2, out2 = run(*args)
     if rc2 != 0:
         print(indent(tail(out2, 15)))
-        return record(step, title, FAIL, f"второй запуск вернул {rc2}")
+        return record(step, title, FAIL, f"второй запуск: {rc_detail(rc2)}")
     h1, h2 = field(out1, needle, idx), field(out2, needle, idx)
     if h1 is None or h2 is None:
         return record(step, title, FAIL, f"в выводе нет «{needle}»")
@@ -175,7 +209,7 @@ def script_step(step, title, args, lines=2, mode="tail", count=False):
     shown = tail(out, lines) if mode == "tail" else head(out, lines)
     print(indent(shown if shown.strip() else out.strip()))
     if rc != 0:
-        return record(step, title, FAIL, f"код возврата {rc}")
+        return record(step, title, FAIL, rc_detail(rc))
     return record(step, title, OK)
 
 
@@ -209,13 +243,13 @@ def step_normalize():
     rc, out = run("normalize/normalize.py")
     print(indent(head(out, 2)))
     if rc != 0:
-        return record("1", "нормализация", FAIL, f"код возврата {rc}")
+        return record("1", "нормализация", FAIL, rc_detail(rc))
     files = [ROOT / "data" / "videos.jsonl"]
     files += sorted((ROOT / "data" / "snapshots").glob("*.jsonl"))
     h1 = sha256_of(files)
     rc, out = run("normalize/normalize.py")
     if rc != 0:
-        return record("1", "нормализация", FAIL, f"повтор вернул {rc}")
+        return record("1", "нормализация", FAIL, f"повтор: {rc_detail(rc)}")
     h2 = sha256_of(files)
     if h1 != h2:
         return record("1", "нормализация", FAIL,
@@ -239,7 +273,7 @@ def step_rebuild(do_rebuild):
         rc2, o2 = run("db/state_hash.py")
         if rc1 or rc2:
             return record("3a", "слепок состояния", FAIL,
-                          f"state_hash вернул {rc1}/{rc2}")
+                          f"state_hash: {rc_detail(rc1)} / {rc_detail(rc2)}")
         s1, s2 = last_field_of_last_line(o1), last_field_of_last_line(o2)
         if not s1 or s1 != s2:
             return record("3a", "слепок состояния", FAIL, f"{s1} != {s2}")
@@ -280,7 +314,7 @@ def rebuild_and_compare(title):
             rc, out = run(*args)
             if rc != 0:
                 print(indent(tail(out, 15)))
-                raise RuntimeError(f"{' '.join(args)} вернул {rc}")
+                raise RuntimeError(f"{' '.join(args)}: {rc_detail(rc)}")
 
     try:
         recreate(); refill()
@@ -413,7 +447,7 @@ def main(argv):
         CHECKS[0] += count_checks(out)
         if rc != 0:
             print(indent(tail(out, 25)))
-            record(step, title, FAIL, f"код возврата {rc}")
+            record(step, title, FAIL, rc_detail(rc))
         else:
             record(step, title, OK)
 
