@@ -56,6 +56,39 @@ def _queue(_):
     return F.queue(S.publishing_queue())
 
 
+# ── Советник ────────────────────────────────────────────────────────────────
+# Читают только JSONL (разбор, журнал экспериментов, сохранённые идеи) и
+# ничего не пишут. Новые идеи с телефона не генерируются: это запись файла
+# и, при заданном ключе, платный запрос — то и другое остаётся на ПК (меню).
+
+def _hits(_):
+    from advisor import analysis as A
+    return A.render(A.analyze())
+
+
+def _next(_):
+    from advisor import experiments as E
+    path, ideas = E.latest_ideas()
+    if not ideas:
+        return ("Сохранённых идей нет. Сгенерировать — на ПК: меню, пункт 4. "
+                "С телефона идеи не создаются, только показываются.")
+    L = [f"Идеи из {path.name} — ставки, а не обещания:", ""]
+    for i, idea in enumerate(ideas, 1):
+        L += [f"{i}. {idea.get('title')}  (проверяет {idea.get('tests_hypothesis')})",
+              f"   что снять: {idea.get('what_to_film')}"]
+        if idea.get("caption_draft"):
+            L.append(f"   подпись: {idea['caption_draft']}")
+        L += [f"   когда: {idea.get('when_to_post')}",
+              f"   проверка: {idea.get('success_check')}", ""]
+    L.append("Взять в работу — на ПК, меню, пункт 5: до публикации.")
+    return "\n".join(L)
+
+
+def _plan(_):
+    from advisor import analysis as A, experiments as E
+    return E.render(E.load(), A.analyze())
+
+
 def _refresh(_):
     return F.refresh(S.check_services())
 
@@ -73,12 +106,15 @@ REGISTRY = {c.name: c for c in (
     Command("/scripts", "scripts", _scripts),
     Command("/experiments", "experiments", _experiments),
     Command("/queue", "publishing queue", _queue),
+    Command("/hits", "what took off and why (verified data)", _hits),
+    Command("/next", "latest saved ideas for next videos", _next),
+    Command("/plan", "experiments: registered bets and results", _plan),
     Command("/refresh", "verify services (read-only)", _refresh),
     Command("/help", "commands", _help),
 )}
 
-ORDER = ("/status", "/report", "/insights", "/ideas", "/scripts",
-         "/experiments", "/queue", "/refresh", "/help")
+ORDER = ("/status", "/hits", "/next", "/plan", "/report", "/insights", "/ideas",
+         "/scripts", "/experiments", "/queue", "/refresh", "/help")
 
 
 def ordered():

@@ -33,7 +33,8 @@ FAKE_TOKEN = "1234567890:AAFfakeTOKENvalue_for_tests_only_0123456789"
 FAKE_DB_PASSWORD = "s3cr3t-db-password-for-tests"
 
 ALL_COMMANDS = ("/start", "/status", "/report", "/insights", "/ideas",
-                "/scripts", "/experiments", "/queue", "/refresh", "/help")
+                "/scripts", "/experiments", "/queue", "/refresh", "/help",
+                "/hits", "/next", "/plan")
 
 TRACKED_TABLES = ("videos", "video_snapshots", "video_features", "video_assets",
                   "insights", "reports", "ideas", "scripts", "experiments",
@@ -506,6 +507,57 @@ def _raises(fn, exc):
         return True
 
 
+# ══════════════════════════════════════════════════════════════════════ J
+def test_J_advisor_commands():
+    """/hits, /next, /plan читают файлы советника — и не пишут их.
+
+    Проверка C считает строки в БД, а эти команды работают с JSONL, поэтому
+    неизменность доказывается отдельно: побайтово для журнала экспериментов
+    и списком файлов для каталога идей.
+    """
+    print("\nJ — команды советника")
+    import hashlib
+    import json as _json
+    from advisor import experiments as E
+    reg = ROOT / "experiments" / "register.jsonl"
+    ideas_dir = ROOT / "data" / "ideas"
+
+    def files_state():
+        listing = sorted(x.name for x in ideas_dir.glob("*")) if ideas_dir.exists() else []
+        return hashlib.sha256(reg.read_bytes()).hexdigest(), listing
+
+    before = files_state()
+    for i, cmd in enumerate(("/hits", "/next", "/plan")):
+        run(cmd, update_id=900 + i)
+    check("J1 журнал экспериментов и каталог идей не изменились",
+          files_state() == before)
+    for cmd in ("/hits", "/next", "/plan"):
+        r = run(cmd, user_id=STRANGER, update_id=910)
+        check(f"J2 {cmd} постороннему отвергнута", r["status"] == "denied", r["status"])
+
+    r = run("/next", update_id=920)
+    check("J3 /next без идей объясняет, где их создают",
+          "на ПК" in r["text"] and "С телефона идеи не создаются" in r["text"])
+    tmp = Path(tempfile.mkdtemp(prefix="ideas_"))
+    (tmp / "20261008T000000_model.json").write_text(_json.dumps({"ideas": [{
+        "title": "Пробная идея", "what_to_film": "что-то", "caption_draft": "",
+        "when_to_post": "воскресенье", "tests_hypothesis": "H3",
+        "success_check": "через 30 дней"}], "new_hypotheses": []},
+        ensure_ascii=False), encoding="utf-8")
+    saved = E.IDEAS_DIR
+    E.IDEAS_DIR = tmp
+    try:
+        r = run("/next", update_id=921)
+    finally:
+        E.IDEAS_DIR = saved
+    check("J4 /next показывает сохранённую идею и что она проверяет",
+          "Пробная идея" in r["text"] and "проверяет H3" in r["text"])
+    check("J5 /hits не выдаёт несверенное за факт",
+          "НЕ СВЕРЕНО" in run("/hits", update_id=922)["text"])
+    check("J6 команды советника не изменяющие",
+          not any(commands.REGISTRY[n].mutating for n in ("/hits", "/next", "/plan")))
+
+
 if __name__ == "__main__":
     TMP = Path(tempfile.mkdtemp(prefix="phase65_"))
     print(f"журнал теста: {TMP}")
@@ -513,7 +565,7 @@ if __name__ == "__main__":
                test_C_no_mutation, test_D_publishing_safety,
                test_E_error_handling, test_F_secret_safety,
                test_G_deterministic_output, test_H_duplicate_update,
-               test_I_preflight_semantics):
+               test_I_preflight_semantics, test_J_advisor_commands):
         fn()
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

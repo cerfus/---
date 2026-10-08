@@ -289,8 +289,10 @@ def render(states, analysis):
 
 # ─────────────────────────────── идеи ────────────────────────────────────────
 
-def latest_ideas(ideas_dir=IDEAS_DIR):
-    files = sorted(Path(ideas_dir).glob("*.json"))
+def latest_ideas(ideas_dir=None):
+    # каталог читается при вызове, а не при определении функции: иначе его
+    # нельзя было бы подменить в тесте
+    files = sorted(Path(ideas_dir or IDEAS_DIR).glob("*.json"))
     if not files:
         return None, []
     data = json.loads(files[-1].read_text(encoding="utf-8"))
