@@ -148,9 +148,10 @@ def register(video_id, existing, path=None, ambiguity=None):
     # Файл вне дерева проекта (например, в тестовой песочнице) записывается
     # как есть: падать из-за формы пути нельзя.
     try:
-        rel = str(path.relative_to(ROOT))
+        # as_posix: в манифест путь пишется одинаково на Windows и Linux
+        rel = path.relative_to(ROOT).as_posix()
     except ValueError:
-        rel = str(path)
+        rel = Path(path).as_posix()
     acquired = datetime.fromtimestamp(path.stat().st_mtime,
                                       tz=timezone.utc).isoformat()
     rec = {
@@ -216,7 +217,7 @@ def build(write=True):
         OUT.mkdir(parents=True, exist_ok=True)
         INCOMING.mkdir(parents=True, exist_ok=True)
         # append-only: дописываем, а не переписываем
-        with MANIFEST.open("a", encoding="utf-8") as fh:
+        with MANIFEST.open("a", encoding="utf-8", newline="\n") as fh:
             for rec in added:
                 fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
         (OUT / "manifest.json").write_text(json.dumps({
@@ -236,7 +237,7 @@ def build(write=True):
                                   else {kk: (vv if isinstance(vv, list) else str(vv))
                                         for kk, vv in sorted(v.items())})
                               for k, v in scan_incoming().items()},
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return rows, added, problems, h, run_id
 
 

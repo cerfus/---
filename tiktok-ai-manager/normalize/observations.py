@@ -66,7 +66,7 @@ def build():
     for r in rows:
         parts.setdefault(r["observed_at"][:10], []).append(r)
     for day, rs in sorted(parts.items()):
-        with (OUT_DIR / f"phase2_{day}.jsonl").open("w", encoding="utf-8") as fh:
+        with (OUT_DIR / f"phase2_{day}.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
             for r in rs:
                 fh.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
     return rows

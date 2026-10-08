@@ -375,7 +375,7 @@ def build(a=None, states=None, ideas_file=None, ideas=None):
 def save(text, out=OUT):
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(text, encoding="utf-8")
+    out.write_text(text, encoding="utf-8", newline="\n")
     return out
 
 

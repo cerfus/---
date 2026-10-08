@@ -87,17 +87,17 @@ def build(write=True):
         OUT.mkdir(parents=True, exist_ok=True)
         REPORT_DIR.mkdir(parents=True, exist_ok=True)
         for name, rows in (("insights", ins), ("blocked_conclusions", blocked)):
-            with (OUT / f"{name}.jsonl").open("w", encoding="utf-8") as fh:
+            with (OUT / f"{name}.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
                 for r in rows:
                     fh.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
-        report_path.write_text(md, encoding="utf-8")
+        report_path.write_text(md, encoding="utf-8", newline="\n")
         (OUT / "manifest.json").write_text(json.dumps({
             "insights_hash": content_hash, "insights_run_id": run_id,
             "period": per, "n_insights": len(ins), "n_blocked": len(blocked),
             "input_hashes": hashes,
             "policy_version": P.INSIGHTS_POLICY_VERSION,
-            "report_path": str(report_path.relative_to(ROOT)),
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            "report_path": report_path.relative_to(ROOT).as_posix(),
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return ins, blocked, md, content_hash, run_id, hashes
 
 

@@ -144,7 +144,7 @@ def build():
             rows += got
         pub = pub2
     OBS.parent.mkdir(parents=True, exist_ok=True)
-    with OBS.open("w", encoding="utf-8") as fh:
+    with OBS.open("w", encoding="utf-8", newline="\n") as fh:
         for r in rows:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
     rounds = sorted({r["round"] for r in rows})

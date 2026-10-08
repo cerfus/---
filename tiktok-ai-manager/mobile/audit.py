@@ -99,7 +99,7 @@ def write(ev, path=None):
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(scrub(ev), ensure_ascii=False, sort_keys=True)
-        with target.open("a", encoding="utf-8") as fh:
+        with target.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(line + "\n")
         return True
     except OSError:

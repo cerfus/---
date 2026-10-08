@@ -54,7 +54,7 @@ def build(write=True):
 
     if write:
         OUT.mkdir(parents=True, exist_ok=True)
-        with (OUT / "tier1_features.jsonl").open("w", encoding="utf-8") as fh:
+        with (OUT / "tier1_features.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
             for r in rows:
                 fh.write(json.dumps({**r, "run_id": run_id},
                                     ensure_ascii=False, sort_keys=True) + "\n")
@@ -73,7 +73,7 @@ def build(write=True):
             "asset_hash": json.loads(
                 (ROOT / "data" / "assets" / "manifest.json")
                 .read_text(encoding="utf-8"))["asset_hash"],
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return rows, h, run_id, by_status
 
 

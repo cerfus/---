@@ -55,9 +55,10 @@ def _rel(path):
     """Путь для показа. Вне проекта relative_to бросает исключение, поэтому
     падать из-за строки в отчёте нельзя: печатаем как есть."""
     try:
-        return str(Path(path).relative_to(ROOT))
+        # as_posix: в данных путь пишется одинаково на Windows и Linux
+        return Path(path).relative_to(ROOT).as_posix()
     except ValueError:
-        return str(path)
+        return Path(path).as_posix()
 
 
 def video_asset_status(videos, assets):
@@ -262,8 +263,8 @@ def run(load=False, verbose=True):
     COVERAGE_JSON.parent.mkdir(parents=True, exist_ok=True)
     COVERAGE_JSON.write_text(json.dumps(
         {**cov, "hashes": hashes, "incoming_scan": scan_serialised},
-        ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    COVERAGE_MD.write_text(coverage_markdown(cov, hashes, scan), encoding="utf-8")
+        ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    COVERAGE_MD.write_text(coverage_markdown(cov, hashes, scan), encoding="utf-8", newline="\n")
 
     # Наблюдаемость: когда прогон был и что получилось. Вне git.
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -277,7 +278,7 @@ def run(load=False, verbose=True):
         "n_feature_rows": cov["n_feature_rows"],
         "evidence_ok": evidence_ok, "deterministic": det_ok,
         "n_problems": len(problems),
-    }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     say(f"\n[9] покрытие: со значением {cov['n_features_with_value']} из "
         f"{cov['n_feature_rows']} "
         f"({100 * (cov['feature_fill_rate'] or 0):.1f}%); "

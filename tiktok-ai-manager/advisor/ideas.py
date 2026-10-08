@@ -474,6 +474,6 @@ def save(r, out_dir=OUT_DIR):
     base = out_dir / f"{stamp}_{r['mode']}"
     j, t = base.with_suffix(".json"), base.with_suffix(".txt")
     j.write_text(scrub(json.dumps(r, ensure_ascii=False, indent=2, sort_keys=True)),
-                 encoding="utf-8")
-    t.write_text(render(r) + "\n", encoding="utf-8")
+                 encoding="utf-8", newline="\n")
+    t.write_text(render(r) + "\n", encoding="utf-8", newline="\n")
     return j, t

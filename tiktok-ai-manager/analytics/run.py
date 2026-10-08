@@ -69,7 +69,7 @@ def build(write=True):
         for f in OUT.glob("*.jsonl"):
             f.unlink()
         for name, rows in sorted(artifacts.items()):
-            with (OUT / f"{name}.jsonl").open("w", encoding="utf-8") as fh:
+            with (OUT / f"{name}.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
                 for row in rows:
                     fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
         (OUT / "manifest.json").write_text(json.dumps({
@@ -77,7 +77,7 @@ def build(write=True):
             "engine_version": baseline.ANALYTICS_ENGINE_VERSION,
             "policy_version": A.ANALYTICS_POLICY_VERSION,
             "counts": {k: len(v) for k, v in sorted(artifacts.items())},
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return artifacts, h, run_id
 
 

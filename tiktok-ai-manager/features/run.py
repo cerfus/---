@@ -68,7 +68,7 @@ def build(write=True):
         name = f"features_{F.FEATURE_POLICY_VERSION}.jsonl"
         for f in OUT.glob(f"features_{F.FEATURE_POLICY_VERSION}*.jsonl"):
             f.unlink()
-        with (OUT / name).open("w", encoding="utf-8") as fh:
+        with (OUT / name).open("w", encoding="utf-8", newline="\n") as fh:
             for r in rows:
                 fh.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
         (OUT / "manifest.json").write_text(json.dumps({
@@ -79,7 +79,7 @@ def build(write=True):
             "n_videos": len({r["video_id"] for r in rows}),
             "n_feature_names": len({r["feature_name"] for r in rows}),
             "db_persistence": DB_PERSISTENCE,
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return rows, h, run_id
 
 

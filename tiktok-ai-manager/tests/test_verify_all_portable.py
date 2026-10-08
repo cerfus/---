@@ -383,6 +383,47 @@ def main():
           f"шагов записано: {len(va.RESULTS)}")
     va.RESULTS.clear()
 
+    print("\n=== I. файлы одинаковы на Windows и Linux ===")
+    # Python на Windows в текстовом режиме пишет \r\n вместо \n, а str(path)
+    # даёт обратные слеши. Оба эффекта меняли производные файлы при каждом
+    # запуске на ПК, и git pull отказывался обновлять проект. Запустить здесь
+    # Windows нечем, поэтому правило проверяется по исходникам: каждая запись
+    # в текстовом режиме обязана явно задать newline="\n", а путь в данные —
+    # писаться через as_posix().
+    bad_writes, bad_paths = [], []
+    for f in sorted(ROOT.rglob("*.py")):
+        if "tests" in f.parts or "__pycache__" in f.parts:
+            continue
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call):
+                continue
+            fn = n.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+            kw = {k.arg: k.value for k in n.keywords}
+            if name == "write_text" or name == "open":
+                mode = None
+                if name == "open":
+                    args = n.args if isinstance(fn, ast.Attribute) else n.args[1:]
+                    if args and isinstance(args[0], ast.Constant):
+                        mode = args[0].value
+                    if isinstance(kw.get("mode"), ast.Constant):
+                        mode = kw["mode"].value
+                    if not (isinstance(mode, str) and ("w" in mode or "a" in mode)
+                            and "b" not in mode):
+                        continue
+                nl = kw.get("newline")
+                if not (isinstance(nl, ast.Constant) and nl.value == "\n"):
+                    bad_writes.append(f"{f.relative_to(ROOT).as_posix()}:{n.lineno}")
+            if (name == "str" and n.args and isinstance(n.args[0], ast.Call)
+                    and isinstance(n.args[0].func, ast.Attribute)
+                    and n.args[0].func.attr == "relative_to"):
+                bad_paths.append(f"{f.relative_to(ROOT).as_posix()}:{n.lineno}")
+    check("I1 каждая запись в текстовом режиме задаёт newline=\"\\n\"",
+          not bad_writes, str(bad_writes[:5]))
+    check("I2 путь в данные пишется через as_posix(), а не str(...relative_to)",
+          not bad_paths, str(bad_paths[:5]))
+
     failed = [n for n, ok in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")
     for n in failed:

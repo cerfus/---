@@ -61,7 +61,7 @@ def build(write=True):
         OUT.mkdir(parents=True, exist_ok=True)
         for f in OUT.glob("*.jsonl"):
             f.unlink()
-        with (OUT / "results.jsonl").open("w", encoding="utf-8") as fh:
+        with (OUT / "results.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
             for r in results:
                 fh.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
         (OUT / "manifest.json").write_text(json.dumps({
@@ -70,7 +70,7 @@ def build(write=True):
             "n_results": len(results),
             "engine_version": results[0]["engine_version"] if results else None,
             "policy_version": P.POLICY_VERSION,
-        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return results, content_hash, run_id
 
 
