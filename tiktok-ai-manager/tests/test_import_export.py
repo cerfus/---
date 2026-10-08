@@ -93,6 +93,39 @@ def main():
     check("D2 итог проверки трафика записан в мета", "ненулевых значений TKPO16-21: 0"
           in tr["_meta"]["result"])
 
+    print("\n=== E. повтор без изменений не становится наблюдением ===")
+    same = IE.build("posts", {"rows": r4["rows"]}, "R9", "2026-12-01T00:00:00Z", "a", "b")
+    check("E1 ответ, совпадающий с последней выгрузкой, распознан",
+          IE.same_as_latest(same) == R4.name, str(IE.same_as_latest(same)))
+    rows2 = [list(r) for r in r4["rows"]]
+    rows2[0][4] = str(int(rows2[0][4]) + 1)
+    changed = IE.build("posts", {"rows": rows2}, "R9", "2026-12-01T00:00:00Z", "a", "b")
+    check("E2 изменился один просмотр — уже новые данные", IE.same_as_latest(changed) is None)
+    tmp2 = Path(tempfile.mkdtemp())
+    (tmp2 / R4.name).write_bytes(R4.read_bytes())
+    resp = tmp2 / "resp.json"
+    resp.write_text(json.dumps({"rows": r4["rows"]}, ensure_ascii=False), encoding="utf-8")
+    saved_raw = IE.RAW
+    IE.RAW = tmp2
+    import contextlib
+    import io
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = IE.main(["posts", str(resp), "--round", "R9", "--from", "a", "--to", "b"])
+        files_same = sorted(x.name for x in tmp2.glob("*_metricool_posts*.json"))
+        resp.write_text(json.dumps({"rows": rows2}, ensure_ascii=False), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc2 = IE.main(["posts", str(resp), "--round", "R9", "--from", "a", "--to", "b",
+                           "--fetched-at", "2026-12-01T00:00:00Z"])
+        files_new = sorted(x.name for x in tmp2.glob("*_metricool_posts*.json"))
+    finally:
+        IE.RAW = saved_raw
+    check("E3 совпавший ответ: «НОВЫХ ДАННЫХ НЕТ», файл не записан, код 0",
+          rc == 0 and "НОВЫХ ДАННЫХ НЕТ" in buf.getvalue() and files_same == [R4.name])
+    check("E4 изменившийся ответ записывается как обычно",
+          rc2 == 0 and len(files_new) == 2)
+
     failed = [n for n, ok in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")
     for n in failed:

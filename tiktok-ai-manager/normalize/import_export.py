@@ -19,6 +19,12 @@
 Исключение из «как есть» одно и названо: у настроек бренда сохраняются
 только поля, нужные проекту. Email владельца и подписанная ссылка на
 аватар в репозиторий не попадают.
+
+Ответ постов, построчно совпадающий с последней выгрузкой, не
+записывается: Metricool не отдаёт метку свежести, и кэш неотличим от
+«ничего не изменилось». Записанный, он стал бы наблюдениями с новым
+временем — утверждением «в этот момент было столько», которого ответ не
+доказывает. Команда так и пишет: «НОВЫХ ДАННЫХ НЕТ».
 """
 import argparse
 import json
@@ -125,6 +131,24 @@ def write(doc, kind, raw_dir=RAW):
     return path
 
 
+def same_as_latest(doc, raw_dir=None):
+    """Имя последней выгрузки постов Metricool, если строки нового ответа с
+    ней совпадают построчно; иначе None. Последняя — по моменту получения."""
+    raw_dir = Path(raw_dir or RAW)
+    latest = None
+    for f in raw_dir.glob("*_metricool_posts*.json"):
+        d = json.loads(f.read_text(encoding="utf-8"))
+        meta = d.get("_meta", {})
+        if meta.get("usable_as_observation") is False:
+            continue
+        at = meta.get("fetched_at") or meta.get("pulled_at") or ""
+        if latest is None or at > latest[0]:
+            latest = (at, f, d)
+    if latest and latest[2].get("rows") == doc.get("rows"):
+        return latest[1].name
+    return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Ответ Metricool → data/raw (raw/v1).")
     ap.add_argument("kind", choices=("posts", "traffic", "besttime", "brand"))
@@ -138,8 +162,17 @@ def main(argv=None):
     response = json.loads(Path(args.response).read_text(encoding="utf-8"))
     doc = build(args.kind, response, args.round, args.fetched_at,
                 args.date_from, args.date_to, args.tz)
-    path = write(doc, args.kind)
-    print(f"записано: {path.relative_to(ROOT)}")
+    if args.kind == "posts":
+        prev = same_as_latest(doc, RAW)
+        if prev:
+            print(f"НОВЫХ ДАННЫХ НЕТ: ответ построчно совпадает с {prev} — файл не "
+                  "записан. Кэш это или за это время ничего не изменилось, Metricool "
+                  "не сообщает; наблюдение с новым временем утверждало бы больше, чем "
+                  "известно.")
+            return 0
+    path = write(doc, args.kind, RAW)
+    shown = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else path
+    print(f"записано: {shown}")
     return 0
 
 
