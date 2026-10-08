@@ -1,0 +1,729 @@
+{
+ "_meta": {
+  "schema": "raw/v1",
+  "round": "R4",
+  "fetched_at": "2026-10-08T21:36:39Z",
+  "run_id": "r4-metricool-besttime",
+  "source": "metricool",
+  "tool": "getBestTimeToPostByNetwork",
+  "usable_as_observation": false,
+  "purpose": "оценка Metricool: активность аудитории по дням и часам",
+  "semantics": "dayOfWeek 1=понедельник … 7=воскресенье; часы — в поясе timezone; value — чем больше, тем лучше по оценке Metricool. Это модель источника, а не наблюдение просмотров.",
+  "request": {
+   "brandId": "7004662",
+   "fromDate": "2026-10-12T00:00:00+03:00",
+   "toDate": "2026-10-18T23:59:59+03:00",
+   "timezone": "Europe/Moscow",
+   "socialNetwork": "tiktok"
+  }
+ },
+ "data": [
+  {
+   "dayOfWeek": 1,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 125
+    },
+    {
+     "hourOfDay": 1,
+     "value": 68
+    },
+    {
+     "hourOfDay": 2,
+     "value": 67
+    },
+    {
+     "hourOfDay": 3,
+     "value": 60
+    },
+    {
+     "hourOfDay": 4,
+     "value": 66
+    },
+    {
+     "hourOfDay": 5,
+     "value": 91
+    },
+    {
+     "hourOfDay": 6,
+     "value": 193
+    },
+    {
+     "hourOfDay": 7,
+     "value": 318
+    },
+    {
+     "hourOfDay": 8,
+     "value": 508
+    },
+    {
+     "hourOfDay": 9,
+     "value": 653
+    },
+    {
+     "hourOfDay": 10,
+     "value": 1089
+    },
+    {
+     "hourOfDay": 11,
+     "value": 741
+    },
+    {
+     "hourOfDay": 12,
+     "value": 1050
+    },
+    {
+     "hourOfDay": 13,
+     "value": 730
+    },
+    {
+     "hourOfDay": 14,
+     "value": 689
+    },
+    {
+     "hourOfDay": 15,
+     "value": 795
+    },
+    {
+     "hourOfDay": 16,
+     "value": 906
+    },
+    {
+     "hourOfDay": 17,
+     "value": 890
+    },
+    {
+     "hourOfDay": 18,
+     "value": 1096
+    },
+    {
+     "hourOfDay": 19,
+     "value": 804
+    },
+    {
+     "hourOfDay": 20,
+     "value": 702
+    },
+    {
+     "hourOfDay": 21,
+     "value": 503
+    },
+    {
+     "hourOfDay": 22,
+     "value": 346
+    },
+    {
+     "hourOfDay": 23,
+     "value": 255
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 2,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 136
+    },
+    {
+     "hourOfDay": 1,
+     "value": 91
+    },
+    {
+     "hourOfDay": 2,
+     "value": 66
+    },
+    {
+     "hourOfDay": 3,
+     "value": 53
+    },
+    {
+     "hourOfDay": 4,
+     "value": 48
+    },
+    {
+     "hourOfDay": 5,
+     "value": 73
+    },
+    {
+     "hourOfDay": 6,
+     "value": 177
+    },
+    {
+     "hourOfDay": 7,
+     "value": 327
+    },
+    {
+     "hourOfDay": 8,
+     "value": 452
+    },
+    {
+     "hourOfDay": 9,
+     "value": 646
+    },
+    {
+     "hourOfDay": 10,
+     "value": 1136
+    },
+    {
+     "hourOfDay": 11,
+     "value": 736
+    },
+    {
+     "hourOfDay": 12,
+     "value": 1082
+    },
+    {
+     "hourOfDay": 13,
+     "value": 707
+    },
+    {
+     "hourOfDay": 14,
+     "value": 681
+    },
+    {
+     "hourOfDay": 15,
+     "value": 771
+    },
+    {
+     "hourOfDay": 16,
+     "value": 812
+    },
+    {
+     "hourOfDay": 17,
+     "value": 883
+    },
+    {
+     "hourOfDay": 18,
+     "value": 1119
+    },
+    {
+     "hourOfDay": 19,
+     "value": 859
+    },
+    {
+     "hourOfDay": 20,
+     "value": 767
+    },
+    {
+     "hourOfDay": 21,
+     "value": 588
+    },
+    {
+     "hourOfDay": 22,
+     "value": 379
+    },
+    {
+     "hourOfDay": 23,
+     "value": 290
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 3,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 158
+    },
+    {
+     "hourOfDay": 1,
+     "value": 119
+    },
+    {
+     "hourOfDay": 2,
+     "value": 85
+    },
+    {
+     "hourOfDay": 3,
+     "value": 116
+    },
+    {
+     "hourOfDay": 4,
+     "value": 106
+    },
+    {
+     "hourOfDay": 5,
+     "value": 99
+    },
+    {
+     "hourOfDay": 6,
+     "value": 237
+    },
+    {
+     "hourOfDay": 7,
+     "value": 420
+    },
+    {
+     "hourOfDay": 8,
+     "value": 772
+    },
+    {
+     "hourOfDay": 9,
+     "value": 856
+    },
+    {
+     "hourOfDay": 10,
+     "value": 1432
+    },
+    {
+     "hourOfDay": 11,
+     "value": 985
+    },
+    {
+     "hourOfDay": 12,
+     "value": 1359
+    },
+    {
+     "hourOfDay": 13,
+     "value": 947
+    },
+    {
+     "hourOfDay": 14,
+     "value": 940
+    },
+    {
+     "hourOfDay": 15,
+     "value": 947
+    },
+    {
+     "hourOfDay": 16,
+     "value": 1122
+    },
+    {
+     "hourOfDay": 17,
+     "value": 1095
+    },
+    {
+     "hourOfDay": 18,
+     "value": 1386
+    },
+    {
+     "hourOfDay": 19,
+     "value": 1039
+    },
+    {
+     "hourOfDay": 20,
+     "value": 907
+    },
+    {
+     "hourOfDay": 21,
+     "value": 580
+    },
+    {
+     "hourOfDay": 22,
+     "value": 370
+    },
+    {
+     "hourOfDay": 23,
+     "value": 279
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 4,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 188
+    },
+    {
+     "hourOfDay": 1,
+     "value": 126
+    },
+    {
+     "hourOfDay": 2,
+     "value": 88
+    },
+    {
+     "hourOfDay": 3,
+     "value": 85
+    },
+    {
+     "hourOfDay": 4,
+     "value": 78
+    },
+    {
+     "hourOfDay": 5,
+     "value": 118
+    },
+    {
+     "hourOfDay": 6,
+     "value": 239
+    },
+    {
+     "hourOfDay": 7,
+     "value": 425
+    },
+    {
+     "hourOfDay": 8,
+     "value": 630
+    },
+    {
+     "hourOfDay": 9,
+     "value": 803
+    },
+    {
+     "hourOfDay": 10,
+     "value": 1471
+    },
+    {
+     "hourOfDay": 11,
+     "value": 978
+    },
+    {
+     "hourOfDay": 12,
+     "value": 1299
+    },
+    {
+     "hourOfDay": 13,
+     "value": 941
+    },
+    {
+     "hourOfDay": 14,
+     "value": 887
+    },
+    {
+     "hourOfDay": 15,
+     "value": 947
+    },
+    {
+     "hourOfDay": 16,
+     "value": 1118
+    },
+    {
+     "hourOfDay": 17,
+     "value": 1097
+    },
+    {
+     "hourOfDay": 18,
+     "value": 1378
+    },
+    {
+     "hourOfDay": 19,
+     "value": 999
+    },
+    {
+     "hourOfDay": 20,
+     "value": 838
+    },
+    {
+     "hourOfDay": 21,
+     "value": 643
+    },
+    {
+     "hourOfDay": 22,
+     "value": 439
+    },
+    {
+     "hourOfDay": 23,
+     "value": 280
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 5,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 175
+    },
+    {
+     "hourOfDay": 1,
+     "value": 113
+    },
+    {
+     "hourOfDay": 2,
+     "value": 101
+    },
+    {
+     "hourOfDay": 3,
+     "value": 85
+    },
+    {
+     "hourOfDay": 4,
+     "value": 79
+    },
+    {
+     "hourOfDay": 5,
+     "value": 81
+    },
+    {
+     "hourOfDay": 6,
+     "value": 226
+    },
+    {
+     "hourOfDay": 7,
+     "value": 444
+    },
+    {
+     "hourOfDay": 8,
+     "value": 684
+    },
+    {
+     "hourOfDay": 9,
+     "value": 890
+    },
+    {
+     "hourOfDay": 10,
+     "value": 1379
+    },
+    {
+     "hourOfDay": 11,
+     "value": 899
+    },
+    {
+     "hourOfDay": 12,
+     "value": 1251
+    },
+    {
+     "hourOfDay": 13,
+     "value": 876
+    },
+    {
+     "hourOfDay": 14,
+     "value": 854
+    },
+    {
+     "hourOfDay": 15,
+     "value": 978
+    },
+    {
+     "hourOfDay": 16,
+     "value": 1079
+    },
+    {
+     "hourOfDay": 17,
+     "value": 1044
+    },
+    {
+     "hourOfDay": 18,
+     "value": 1222
+    },
+    {
+     "hourOfDay": 19,
+     "value": 891
+    },
+    {
+     "hourOfDay": 20,
+     "value": 689
+    },
+    {
+     "hourOfDay": 21,
+     "value": 474
+    },
+    {
+     "hourOfDay": 22,
+     "value": 328
+    },
+    {
+     "hourOfDay": 23,
+     "value": 294
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 6,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 170
+    },
+    {
+     "hourOfDay": 1,
+     "value": 105
+    },
+    {
+     "hourOfDay": 2,
+     "value": 76
+    },
+    {
+     "hourOfDay": 3,
+     "value": 51
+    },
+    {
+     "hourOfDay": 4,
+     "value": 49
+    },
+    {
+     "hourOfDay": 5,
+     "value": 69
+    },
+    {
+     "hourOfDay": 6,
+     "value": 145
+    },
+    {
+     "hourOfDay": 7,
+     "value": 257
+    },
+    {
+     "hourOfDay": 8,
+     "value": 396
+    },
+    {
+     "hourOfDay": 9,
+     "value": 517
+    },
+    {
+     "hourOfDay": 10,
+     "value": 852
+    },
+    {
+     "hourOfDay": 11,
+     "value": 566
+    },
+    {
+     "hourOfDay": 12,
+     "value": 815
+    },
+    {
+     "hourOfDay": 13,
+     "value": 564
+    },
+    {
+     "hourOfDay": 14,
+     "value": 560
+    },
+    {
+     "hourOfDay": 15,
+     "value": 552
+    },
+    {
+     "hourOfDay": 16,
+     "value": 620
+    },
+    {
+     "hourOfDay": 17,
+     "value": 531
+    },
+    {
+     "hourOfDay": 18,
+     "value": 709
+    },
+    {
+     "hourOfDay": 19,
+     "value": 573
+    },
+    {
+     "hourOfDay": 20,
+     "value": 523
+    },
+    {
+     "hourOfDay": 21,
+     "value": 347
+    },
+    {
+     "hourOfDay": 22,
+     "value": 275
+    },
+    {
+     "hourOfDay": 23,
+     "value": 185
+    }
+   ]
+  },
+  {
+   "dayOfWeek": 7,
+   "bestTimesByHour": [
+    {
+     "hourOfDay": 0,
+     "value": 130
+    },
+    {
+     "hourOfDay": 1,
+     "value": 87
+    },
+    {
+     "hourOfDay": 2,
+     "value": 69
+    },
+    {
+     "hourOfDay": 3,
+     "value": 61
+    },
+    {
+     "hourOfDay": 4,
+     "value": 35
+    },
+    {
+     "hourOfDay": 5,
+     "value": 53
+    },
+    {
+     "hourOfDay": 6,
+     "value": 129
+    },
+    {
+     "hourOfDay": 7,
+     "value": 228
+    },
+    {
+     "hourOfDay": 8,
+     "value": 337
+    },
+    {
+     "hourOfDay": 9,
+     "value": 506
+    },
+    {
+     "hourOfDay": 10,
+     "value": 816
+    },
+    {
+     "hourOfDay": 11,
+     "value": 493
+    },
+    {
+     "hourOfDay": 12,
+     "value": 720
+    },
+    {
+     "hourOfDay": 13,
+     "value": 487
+    },
+    {
+     "hourOfDay": 14,
+     "value": 493
+    },
+    {
+     "hourOfDay": 15,
+     "value": 492
+    },
+    {
+     "hourOfDay": 16,
+     "value": 595
+    },
+    {
+     "hourOfDay": 17,
+     "value": 524
+    },
+    {
+     "hourOfDay": 18,
+     "value": 677
+    },
+    {
+     "hourOfDay": 19,
+     "value": 632
+    },
+    {
+     "hourOfDay": 20,
+     "value": 579
+    },
+    {
+     "hourOfDay": 21,
+     "value": 402
+    },
+    {
+     "hourOfDay": 22,
+     "value": 283
+    },
+    {
+     "hourOfDay": 23,
+     "value": 161
+    }
+   ]
+  }
+ ]
+}
