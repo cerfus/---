@@ -18,6 +18,12 @@
 3. Закономерность при N < MIN_SAMPLE_FOR_FACT — только HYPOTHESIS. FACT
    здесь — лишь описания конкретных роликов и счёт, без обобщения.
 
+4. Просмотры берутся только СВЕРЕННЫЕ: из data/reconciliation/results.jsonl,
+   со статусом, допускающим FACT (CLAUDE.md: «FACT опирается на статус
+   именно той метрики»). Более свежее, но не сверенное значение — например,
+   из одного Metricool, когда Supermetrics недоступен, — в разбор не входит
+   и показывается отдельным разделом с пометкой «не сверено».
+
 Каждая формулировка проходит insights.validator при построении: причинные
 и оценочные конструкции не доходят до вывода вообще.
 """
@@ -32,7 +38,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from insights.policies import MIN_SAMPLE_FOR_FACT          # noqa: E402
+from insights.policies import (FACT_BLOCKING_STATUSES,     # noqa: E402
+                               MIN_SAMPLE_FOR_FACT)
 from insights.validator import find_violations              # noqa: E402
 
 ADVISOR_POLICY_VERSION = "advisor-analysis-1.0.0"
@@ -66,8 +73,42 @@ def _caption_words(caption):
     return [w for w in text.split() if re.search(r"\w", w)]
 
 
+def _verified_views(root):
+    """Последнее СВЕРЕННОЕ значение просмотров по ролику: {video_id: (views, at)}.
+
+    Сверенным считается результат сверки со статусом, который не блокирует
+    FACT. Значение — от канонического источника, если он назван (отставание),
+    иначе совпавшее значение пары.
+    """
+    path = Path(root) / "data" / "reconciliation" / "results.jsonl"
+    out = {}
+    if not path.exists():
+        return out
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if r.get("metric") != "views" or r.get("classification") in FACT_BLOCKING_STATUSES:
+                continue
+            if r.get("canonical_source") == r.get("source_b"):
+                value = r.get("value_b")
+            elif r.get("canonical_source") == r.get("source_a"):
+                value = r.get("value_a")
+            else:
+                vals = [v for v in (r.get("value_a"), r.get("value_b")) if v is not None]
+                value = max(vals) if vals else None
+            if value is None:
+                continue
+            at = max(x for x in (r.get("observed_at_a"), r.get("observed_at_b")) if x)
+            cur = out.get(r["video_id"])
+            if cur is None or at > cur[1] or (at == cur[1] and value > cur[0]):
+                out[r["video_id"]] = (int(value), at)
+    return out
+
+
 def load(root=ROOT):
-    """Ролики с последним наблюдением. Детерминированно: порядок — video_id."""
+    """(сверенные ролики, свежие несверенные наблюдения). Порядок — video_id."""
     root = Path(root)
     videos = {}
     with open(root / "data" / "videos.jsonl", encoding="utf-8") as f:
@@ -76,7 +117,8 @@ def load(root=ROOT):
                 v = json.loads(line)
                 videos[v["video_id"]] = v
 
-    # последнее наблюдение по каждой паре (ролик, источник)
+    # последнее наблюдение по каждой паре (ролик, источник) — для раздела
+    # «не сверено»: оно может быть свежее последнего сверенного
     latest = {}
     for path in sorted(glob.glob(str(root / "data" / "snapshots" / "*.jsonl"))):
         with open(path, encoding="utf-8") as f:
@@ -84,23 +126,32 @@ def load(root=ROOT):
                 if not line.strip():
                     continue
                 s = json.loads(line)
+                if s.get("views") is None:
+                    continue
                 key = (s["video_id"], s["source"])
                 cur = latest.get(key)
                 if cur is None or s["observed_at"] > cur["observed_at"]:
                     latest[key] = s
 
-    rows = []
+    verified = _verified_views(root)
+    rows, fresh = [], []
     for vid in sorted(videos):
         v = videos[vid]
-        obs = [s for (i, _), s in latest.items() if i == vid]
-        if not obs:
-            continue
-        # Счётчик монотонен: отставший источник даёт меньшее значение,
-        # поэтому берётся наибольшее из последних наблюдений источников.
-        views = max((s.get("views") or 0) for s in obs)
-        seen = max(s["observed_at"] for s in obs)
         pub = datetime.fromisoformat(v["published_at"])
-        age = (datetime.fromisoformat(seen) - pub).days
+        obs = [s for (i, _), s in latest.items() if i == vid]
+        newest = max(obs, key=lambda s: (s["observed_at"], s["views"]), default=None)
+        ver = verified.get(vid)
+        if newest is not None and (ver is None or newest["observed_at"] > ver[1]):
+            fresh.append({
+                "video_id": vid, "url": v.get("url"), "source": newest["source"],
+                "views": newest["views"], "observed_at": newest["observed_at"],
+                "age_days": (datetime.fromisoformat(newest["observed_at"]) - pub).days,
+                "verified_views": ver[0] if ver else None,
+                "verified_at": ver[1] if ver else None,
+                "caption": v.get("caption") or ""})
+        if ver is None:
+            continue
+        views, seen = ver
         caption = v.get("caption") or ""
         words = len(_caption_words(caption))
         rows.append({
@@ -109,7 +160,7 @@ def load(root=ROOT):
             "views": views,
             "observed_at": seen,
             "published_at": v["published_at"],
-            "age_days": age,
+            "age_days": (datetime.fromisoformat(seen) - pub).days,
             "duration_sec": v.get("duration_sec"),
             "weekday": WEEKDAYS[pub.weekday()],
             "hour_utc": pub.hour,
@@ -119,7 +170,7 @@ def load(root=ROOT):
                              else "только хештеги"),
             "caption": caption,
         })
-    return rows
+    return rows, fresh
 
 
 def _checked(item):
@@ -143,8 +194,10 @@ CATEGORICAL = (("weekday", "День публикации"),
                ("caption_kind", "Вид подписи"))
 
 
-def analyze(rows=None, root=ROOT):
-    rows = load(root) if rows is None else rows
+def analyze(rows=None, root=ROOT, fresh=None):
+    if rows is None:
+        rows, fresh = load(root)
+    fresh = fresh or []
     n = len(rows)
     total = sum(r["views"] for r in rows)
     mature = [r for r in rows if r["age_days"] >= MATURE_AGE_DAYS]
@@ -160,6 +213,7 @@ def analyze(rows=None, root=ROOT):
         "n_videos": n, "n_mature": nm, "total_views": total,
         "facts": [], "hypotheses": [], "not_distinguishing": [],
         "videos": [], "young": [],
+        "unverified": sorted(fresh, key=lambda x: (-x["views"], x["video_id"])),
     }
     if not mature:
         out["facts"].append(_checked({
@@ -279,6 +333,14 @@ def render(a):
     if a["not_distinguishing"]:
         L += ["", "Не отличает хиты:"]
         L += [f"  {x['statement']}" for x in a["not_distinguishing"]]
+    if a.get("unverified"):
+        L += ["", "Свежее, но НЕ СВЕРЕНО (второй источник недоступен) — в разбор "
+                  "не входит, FACT на этом не строится:"]
+        for u in a["unverified"]:
+            was = (f"сверено {u['verified_views']} на {u['verified_at'][:10]}"
+                   if u["verified_views"] is not None else "сверенных данных нет")
+            L.append(f"  {u['views']:>8} на {u['observed_at'][:10]} ({u['source']}, "
+                     f"возраст {u['age_days']} дн.) · {was} · {u['url']}")
     L += ["", f"Чтобы стало FACT, нужно не меньше {a['min_sample_required']} "
               f"зрелых роликов; сейчас {a['n_mature']}.",
           "Часовой пояс аудитории не подтверждён (OQ-1): время указано в UTC."]

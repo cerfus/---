@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import golden as G  # noqa: E402  эталон набора данных
 import psycopg
 from core import config
 from features import policies as F
@@ -168,7 +170,8 @@ def test_e_new_version_leaves_old_intact():
         cur.execute("""SELECT count(*) FROM video_features WHERE policy_version=%s""",
                     (PV1,))
         n_after = cur.fetchone()[0]
-        check(f"добавлено {added} строк новой версии", added == 16, str(added))
+        check(f"добавлено {added} строк новой версии (по строке на ролик)",
+              added == G.N_VIDEOS, str(added))
         check("контрольная сумма прежней версии не изменилась", before == after,
               (before or "")[:16])
         check("число строк прежней версии не изменилось", n_before == n_after,
@@ -188,15 +191,22 @@ def test_content_and_traceability():
                     " count(DISTINCT feature_name) FROM video_features"
                     " WHERE policy_version=%s", (PV1,))
         n, nv, nf = cur.fetchone()
-        check("720 строк", n == 720, str(n))
-        check("16 роликов", nv == 16, str(nv))
+        check(f"{G.FEATURE_ROWS} строк", n == G.FEATURE_ROWS, str(n))
+        check(f"{G.N_VIDEOS} роликов", nv == G.N_VIDEOS, str(nv))
         check("45 имён признаков", nf == 45, str(nf))
         cur.execute("""SELECT feature_status, count(*) FROM video_features
                         WHERE policy_version=%s GROUP BY 1 ORDER BY 1""", (PV1,))
         st = dict(cur.fetchall())
-        check("статусы совпадают с JSONL",
-              st == {"derived": 192, "insufficient_baseline": 48,
-                     "observed": 336, "unavailable": 144}, str(st))
+        # Прежняя проверка называлась «совпадают с JSONL», а сравнивала с
+        # константой. Теперь обе: с самим JSONL (источником истины) и с эталоном.
+        jl = {}
+        jpath = ROOT / "data" / "features" / f"features_{PV1}.jsonl"
+        for line in jpath.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                st_ = json.loads(line)["feature_status"]
+                jl[st_] = jl.get(st_, 0) + 1
+        check("статусы в БД совпадают с JSONL", st == jl, str(st))
+        check("статусы совпадают с эталоном", st == G.FEATURE_STATUSES, str(st))
 
         cur.execute("""SELECT computed_from, evidence_refs, source_basis,
                               reconciliation_basis

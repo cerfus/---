@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import golden as G  # noqa: E402  эталон набора данных
 import psycopg
 from core import config
 from insights import generators
@@ -103,7 +105,8 @@ def test_determinism():
     check("тот же insights_run_id", r1 == r2, r1[:8])
     check("текст отчёта воспроизводится побайтово", md1 == md2)
     check("время генерации в тело отчёта не попадает",
-          "generated_at" not in md1 and md1.count("2026-09-17") >= 1)
+          # в отчёте — дата ДАННЫХ (период), а не момент генерации
+          "generated_at" not in md1 and md1.count(R.period()) >= 1)
 
 
 # ─────────────────────────────────────────────────────────────────── ОТЧЁТ
@@ -124,7 +127,7 @@ def test_report():
           str(find_violations(md.replace("Причинность не установлена", ""),
                               "DATA_QUALITY"))[:50])
     check("машинный блок для следующего отчёта присутствует",
-          daily.read_previous(ROOT / "reports" / "daily" / "2026-09-17.md") is not None)
+          daily.read_previous(ROOT / "reports" / "daily" / f"{R.period()}.md") is not None)
 
 
 # ─────────────────────────────────────────────────────────────── ХРАНИЛИЩЕ
@@ -132,9 +135,9 @@ def test_storage():
     print("\nХРАНИЛИЩЕ")
     ins, blocked, _, _, run_id, _ = R.build(write=False)
     d = R.load_inputs()
-    before = R.load_to_db(ins, blocked, run_id, "reports/daily/2026-09-17.md",
+    before = R.load_to_db(ins, blocked, run_id, f"reports/daily/{R.period()}.md",
                           d["coverage"], len(d["videos"]))
-    again = R.load_to_db(ins, blocked, run_id, "reports/daily/2026-09-17.md",
+    again = R.load_to_db(ins, blocked, run_id, f"reports/daily/{R.period()}.md",
                          d["coverage"], len(d["videos"]))
     check("повторная запись идемпотентна", again == (0, 0), str(again))
     with psycopg.connect(config.dsn("ro")) as c, c.cursor() as cur:
@@ -195,17 +198,18 @@ def test_storage():
 # ───────────────────────────────────────────────────────────── РЕГРЕССИЯ
 def test_upstream_unchanged():
     print("\nРЕГРЕССИЯ ВЫШЕСТОЯЩИХ СЛОЁВ")
+    extra, missing = G.raw_set_diff()
+    check("эталон посчитан на текущем сырье (tests/golden.py)",
+          not extra and not missing,
+          f"лишнее {extra}, нет {missing}" if extra or missing else "совпадает")
     h = R.input_hashes()
     check("analytics_hash не изменился",
-          h["analytics"] == "52fa355f77987c7aa8479e18a89616cd6c2b8e36dfaf49c477e2eca7b35d474f",
-          h["analytics"][:16])
+          h["analytics"] == G.UPSTREAM["analytics"], h["analytics"][:16])
     check("feature_hash не изменился",
-          h["features"] == "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
-          h["features"][:16])
+          h["features"] == G.UPSTREAM["features"], h["features"][:16])
     check("reconciliation hash не изменился",
-          h["reconciliation"] == "f52205acef19ba5082f192e7206ff9faa3917cde3be0e970f7afb4e0202506cf",
+          h["reconciliation"] == G.UPSTREAM["reconciliation"],
           h["reconciliation"][:16])
-
 
 if __name__ == "__main__":
     for fn in (test_validator_rejects, test_validator_accepts, test_generators,

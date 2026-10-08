@@ -105,9 +105,12 @@ def invented_numbers(text, allowed):
 
 # ─────────────────────────────────── бриф ───────────────────────────────────
 
-def build_brief(a):
-    """Всё, что модели разрешено знать. Только поля разбора, без догадок."""
-    L = ["ДАННЫЕ АККАУНТА @gulyashik52",
+UNVERIFIED_MARK = "не сверено"
+
+
+def brief_parts(a):
+    """(сверенная часть, несверенная часть). Разделение нужно проверке чисел."""
+    L = ["ДАННЫЕ АККАУНТА @gulyashik52 (сверенные)",
          f"Замер: {a['observed_at']}. Роликов {a['n_videos']}, "
          f"зрелых (не моложе {a['mature_age_days']} дней) {a['n_mature']}.", "",
          "Факты:"]
@@ -117,14 +120,28 @@ def build_brief(a):
           or ["- нет"])
     L += ["", "Признаки, которые хиты НЕ отличают:"]
     L += ([f"- {x['statement']}" for x in a["not_distinguishing"]] or ["- нет"])
-    L += ["", "Ролики (просмотры на момент замера; молодые помечены):"]
+    L += ["", "Ролики (сверенные просмотры; молодые помечены):"]
     for v in a["videos"]:
         tag = "ХИТ" if v.get("hit") else ("МОЛОДОЙ" if not v["mature"] else "")
         L.append(f"- video_id {v['video_id']} {tag} | просмотров {v['views']} | "
                  f"возраст {v['age_days']} дн. | {A._num(v['duration_sec'])} с | "
                  f"{v['weekday']} {v['hour_utc']}:00 UTC | подпись: "
                  f"«{v['caption'][:300]}»")
-    return "\n".join(L)
+    U = []
+    if a.get("unverified"):
+        U = ["НЕ СВЕРЕНО — только один источник, второй недоступен. Это не факты: "
+             f"упоминать только с пометкой «{UNVERIFIED_MARK}».", ""]
+        for u in a["unverified"]:
+            U.append(f"- video_id {u['video_id']} | просмотров {u['views']} на "
+                     f"{u['observed_at'][:10]} | возраст {u['age_days']} дн. | "
+                     f"подпись: «{u['caption'][:300]}»")
+    return "\n".join(L), "\n".join(U)
+
+
+def build_brief(a):
+    """Всё, что модели разрешено знать. Только поля разбора, без догадок."""
+    verified, unverified = brief_parts(a)
+    return verified + ("\n\n" + unverified if unverified else "")
 
 
 def _banned_list():
@@ -147,7 +164,8 @@ SYSTEM = """Ты помогаешь владельцу TikTok-аккаунта @
 5. Ролики моложе {mature} дней по просмотрам с остальными не сравнивай.
 6. Что происходило в кадре, в данных нет — есть только подписи. Говори о подписях, \
 а не о том, что было в видео.
-7. Числа в what_to_film, caption_draft и when_to_post — это план (длительность, время, \
+7. Числа из блока «НЕ СВЕРЕНО» — не факты: упоминай их только со словами «не сверено».
+8. Числа в what_to_film, caption_draft и when_to_post — это план (длительность, время, \
 число роликов серии), а не статистика о прошлом.
 
 Придумай {n} разных идей. Пиши по-русски, конкретно: что снять, черновик подписи, \
@@ -160,6 +178,19 @@ def system_prompt():
 
 
 # ─────────────────────────────── проверка ответа ─────────────────────────────
+
+def unverified_only_numbers(a):
+    """Числа, которые есть в несверенной части брифа и нет в сверенной."""
+    verified, unverified = brief_parts(a)
+    return numbers_in(unverified) - numbers_in(verified)
+
+
+def unmarked_unverified(text, a):
+    """Несверенные числа в тексте без пометки «не сверено». Пусто — порядок."""
+    if UNVERIFIED_MARK in (text or "").lower():
+        return []
+    return sorted(numbers_in(text) & unverified_only_numbers(a))
+
 
 def validate(payload, a, brief):
     """Принятые гипотезы и идеи плюс отвергнутые с причинами."""
@@ -185,6 +216,9 @@ def validate(payload, a, brief):
         bad = invented_numbers(h.get("statement", ""), allowed)
         if bad:
             why.append(f"чисел нет в данных: {', '.join(bad)}")
+        raw = unmarked_unverified(h.get("statement", ""), a)
+        if raw:
+            why.append(f"несверенные числа без пометки «{UNVERIFIED_MARK}»: {', '.join(raw)}")
         if why:
             rejected.append({"kind": "гипотеза", "id": hid, "reasons": why})
             continue
@@ -207,6 +241,10 @@ def validate(payload, a, brief):
         bad = invented_numbers(idea.get("data_basis", ""), allowed)
         if bad:
             why.append(f"data_basis: чисел нет в данных: {', '.join(bad)}")
+        raw = unmarked_unverified(idea.get("data_basis", ""), a)
+        if raw:
+            why.append(f"data_basis: несверенные числа без пометки "
+                       f"«{UNVERIFIED_MARK}»: {', '.join(raw)}")
         if why:
             rejected.append({"kind": "идея", "id": idea.get("title") or f"#{i}",
                              "reasons": why})

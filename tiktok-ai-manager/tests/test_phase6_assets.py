@@ -19,6 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import golden as G  # noqa: E402  эталон набора данных
 import psycopg
 from assets import policies as A
 from assets import probe as PR
@@ -379,8 +381,9 @@ def test_E_version_coexistence():
     with psycopg.connect(config.dsn("ro")) as c, c.cursor() as cur:
         cur.execute("SELECT tier, count(*) FROM video_features GROUP BY 1 ORDER BY 1")
         by_tier = dict(cur.fetchall())
-        check("E7 прежние 720 строк Tier 0/0.5 на месте",
-              by_tier.get("tier_0", 0) == 480 and by_tier.get("tier_0.5", 0) == 240,
+        check(f"E7 прежние {G.TIER0_ROWS + G.TIER05_ROWS} строк Tier 0/0.5 на месте",
+              by_tier.get("tier_0", 0) == G.TIER0_ROWS
+              and by_tier.get("tier_0.5", 0) == G.TIER05_ROWS,
               str(by_tier))
 
 
@@ -686,17 +689,15 @@ def test_K_phase51_guards_intact():
           and "statistical_significance" not in ev["executed"])
     ins, blocked, md, h, run_id, hashes = R.build(write=False)
     check("K3 insights_hash не изменился Phase 6",
-          h == "d22e195409886f8e9fc563600b4ad61eb4aac0db299978390550cbcc13e92802",
+          h == G.INSIGHTS_HASH,
           h[:16])
-    check("K4 выводов по-прежнему 11, блокировок 28",
-          len(ins) == 11 and len(blocked) == 28,
+    check(f"K4 выводов по-прежнему {G.N_INSIGHTS}, блокировок {G.N_BLOCKED}",
+          len(ins) == G.N_INSIGHTS and len(blocked) == G.N_BLOCKED,
           f"{len(ins)}/{len(blocked)}")
     check("K5 FACT по-прежнему ноль",
           not [i for i in ins if i["claim_type"] == "FACT"])
     check("K6 upstream-хеши не тронуты",
-          hashes == {"analytics": "52fa355f77987c7aa8479e18a89616cd6c2b8e36dfaf49c477e2eca7b35d474f",
-                     "features": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
-                     "reconciliation": "f52205acef19ba5082f192e7206ff9faa3917cde3be0e970f7afb4e0202506cf"},
+          hashes == G.UPSTREAM,
           str({k: v[:8] for k, v in hashes.items()}))
 
 

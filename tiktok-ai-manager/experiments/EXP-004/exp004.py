@@ -117,8 +117,23 @@ def age_seconds(published, fetched_at, precision):
     return int((f - p).total_seconds())
 
 
+# Сырьё эксперимента — раунды R1-R3 от 2026-09-17, перечисленные явно.
+# Эксперимент проведён, его доказательная база закрыта: поздние выгрузки
+# (R4 от 2026-10-08 и далее) в неё не входят. Без этого списка R4 дописал
+# 136 строк в exp004_observations.jsonl. Список читает и регрессионный тест.
+EXP004_RAW = frozenset({
+    "2026-09-17_metricool_posts.json",
+    "2026-09-17_supermetrics_videos.json",
+    "2026-09-17T095902Z_metricool_posts_r2.json",
+    "2026-09-17T095902Z_supermetrics_videos_r2.json",
+    "2026-09-17T100216Z_metricool_posts_r3.json",
+    "2026-09-17T100216Z_supermetrics_videos_r3a_REPLAY.json",
+    "2026-09-17T100244Z_supermetrics_videos_r3b.json",
+})
+
+
 def build():
-    files = sorted(RAW.glob("*.json"))
+    files = sorted(f for f in RAW.glob("*.json") if f.name in EXP004_RAW)
     rows, excluded, pub = [], [], {}
     for _ in range(2):          # второй проход добирает published для файлов без него
         rows, excluded, pub2 = [], [], dict(pub)

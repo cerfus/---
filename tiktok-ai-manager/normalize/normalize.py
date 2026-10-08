@@ -141,7 +141,11 @@ def normalize():
                 "fetched_at": fetched.isoformat(), "observed_at": obs_at.isoformat(),
                 "observed_at_precision": precision, "observed_at_authority": authority,
                 "age_seconds": age,
-                "age_bucket": "backfill",     # все ролики опубликованы до подключения
+                # Плановых замеров (T+10m … T+30d) нет: каждое наблюдение
+                # снято выгрузкой задним числом. Это верно и для роликов после
+                # подключения: Metricool не отдаёт момент актуальности, так что
+                # фактический возраст наблюдения не доказан.
+                "age_bucket": "backfill",
                 "bucket_offset_sec": None,
                 "raw_ref": raw_ref, "run_id": run_id,
             }

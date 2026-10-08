@@ -105,6 +105,17 @@ def run_all(real_make_client):
     young_hit = [v for v in a["videos"] if not v["mature"] and v["hit"]]
     check("A12 молодой ролик хитом не считается", not young_hit)
 
+    # Только сверенные просмотры: FACT опирается на статус именно этой метрики
+    ver = A._verified_views(ROOT)
+    check("A13 в разборе только сверенные просмотры",
+          all(v["views"] == ver[v["video_id"]][0] for v in a["videos"]))
+    newest = [u for u in a["unverified"] if u["verified_views"] is None]
+    check("A14 ролик без сверенных данных в разбор не входит, но показан",
+          newest and not {u["video_id"] for u in newest} & {v["video_id"] for v in a["videos"]},
+          str([u["video_id"] for u in newest]))
+    check("A15 несверенное помечено в тексте разбора",
+          "НЕ СВЕРЕНО" in A.render(a) if a["unverified"] else True)
+
     print("\n=== B. разбор на подставных данных ===")
     b = A.analyze([row("y1", 999999, 3), row("y2", 5, 4)])
     check("B1 без зрелых роликов — ни гипотез, ни хитов",
@@ -124,6 +135,13 @@ def run_all(real_make_client):
     b = A.analyze(same)
     check("B4 признак, общий с остальными, — не гипотеза",
           "weekday" not in {h["attribute"] for h in b["hypotheses"]})
+
+    fresh = [{"video_id": "z", "url": "u/z", "source": "metricool", "views": 10**7,
+              "observed_at": "2026-10-08T00:00:00+00:00", "age_days": 60,
+              "verified_views": None, "verified_at": None, "caption": ""}]
+    b = A.analyze(same, fresh=fresh)
+    check("B5 несверенный рекорд хитом не становится",
+          "z" not in {v["video_id"] for v in b["videos"]} and b["unverified"][0]["video_id"] == "z")
 
     print("\n=== C. идеи без модели ===")
     r = I.generate(a, offline=True)
@@ -238,6 +256,24 @@ def run_all(real_make_client):
         r2 = I.generate(a, client=FakeClient(exc=exc), sdk=SDK)
         check(f"{name} — понятная причина и шаблоны",
               r2["mode"] == "template" and why in (r2["note"] or ""), str(r2["note"]))
+
+    # несверенное число — только с пометкой «не сверено»
+    if a["unverified"]:
+        u = a["unverified"][0]
+        raw_n = str(u["views"])
+        check("D25 несверенное число есть только в несверенной части брифа",
+              raw_n in I.unverified_only_numbers(a), raw_n)
+        bare = dict(payload, new_hypotheses=[], ideas=[dict(
+            base, title="Без пометки", tests_hypothesis="H1",
+            data_basis=f"Свежий счётчик {raw_n}, n=10.")])
+        marked = dict(bare, ideas=[dict(bare["ideas"][0], title="С пометкой",
+                                        data_basis=f"Свежий счётчик {raw_n} (не сверено), n=10.")])
+        rb = I.generate(a, client=FakeClient(json.dumps(bare, ensure_ascii=False)))
+        rm = I.generate(a, client=FakeClient(json.dumps(marked, ensure_ascii=False)))
+        check("D26 несверенное число без пометки отвергнуто",
+              not rb["ideas"] and "без пометки" in " ".join(rb["rejected"][0]["reasons"]))
+        check("D27 то же число с пометкой «не сверено» принято",
+              [i["title"] for i in rm["ideas"]] == ["С пометкой"])
 
     print("\n=== E. ключ не утекает ===")
     key = "sk-ant-api03-TESTSECRETKEY0123456789abcdef"

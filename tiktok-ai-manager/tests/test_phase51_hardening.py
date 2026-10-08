@@ -11,6 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import golden as G  # noqa: E402  эталон набора данных
 import psycopg
 from core import config
 from insights import generators, pipeline
@@ -407,11 +409,7 @@ def test_G_rebuild_repeatability():
     check("G11 вердикт конвейера воспроизводим", ev1 == ev2)
 
     h = R.input_hashes()
-    expect = {
-        "analytics": "52fa355f77987c7aa8479e18a89616cd6c2b8e36dfaf49c477e2eca7b35d474f",
-        "features": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
-        "reconciliation": "f52205acef19ba5082f192e7206ff9faa3917cde3be0e970f7afb4e0202506cf",
-    }
+    expect = G.UPSTREAM
     for k, v in sorted(expect.items()):
         check(f"G12 {k}_hash не тронут hardening-ом", h[k] == v, h[k][:16])
 

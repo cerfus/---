@@ -49,6 +49,21 @@ EXPLAINED_DELTA = {
 
 LAGGED_VIDEOS = {"7643545925926915360", "7669369589641366817", "7683780392029015328"}
 
+# Набор данных EXP-004 — список сырья живёт в самом эксперименте
+# (experiments/EXP-004/exp004.py, EXP004_RAW): регрессия описывает именно
+# проведённый эксперимент, и поздние выгрузки в неё не входят.
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location("exp004", ROOT / "experiments" / "EXP-004" / "exp004.py")
+_exp004 = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_exp004)
+EXP004_RAW = _exp004.EXP004_RAW
+
+
+def exp004_observations():
+    """Наблюдения только из сырья EXP-004."""
+    return [o for o in observations.load()
+            if o["raw_ref"].split("#")[0].rsplit("/", 1)[-1] in EXP004_RAW]
+
 
 def check(name, ok, detail=""):
     RESULTS.append((name, ok, detail))
@@ -56,7 +71,7 @@ def check(name, ok, detail=""):
 
 
 def main():
-    res, content_hash = reconcile(observations.load())
+    res, content_hash = reconcile(exp004_observations())
     c = collections.Counter(r["classification"] for r in res)
 
     print("\nРАСПРЕДЕЛЕНИЕ")
@@ -100,7 +115,7 @@ def main():
     check("both_discrepancy отсутствует", c.get("both_discrepancy", 0) == 0)
 
     print("\nДЕТЕРМИНИЗМ")
-    _, h2 = reconcile(observations.load())
+    _, h2 = reconcile(exp004_observations())
     check("content_hash воспроизводится", content_hash == h2, content_hash[:16])
 
     failed = [n for n, ok, _ in RESULTS if not ok]

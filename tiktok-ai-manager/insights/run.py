@@ -17,7 +17,22 @@ from reports import daily
 OUT = ROOT / "data" / "insights"
 REPORT_DIR = ROOT / "reports" / "daily"
 RUN_NS = uuid.UUID("6f1b3e7a-0000-4000-8000-000000000005")
-PERIOD = "2026-09-17"          # дата наблюдений EXP-004
+
+
+def period():
+    """Дата отчёта — день последнего наблюдения в данных, а не часы машины.
+
+    Раньше здесь стояла константа "2026-09-17" (дата наблюдений EXP-004):
+    после выгрузки 2026-10-08 отчёт с новыми данными всё ещё назывался
+    сентябрьским и перезаписывал сентябрьский файл. Теперь каждая выгрузка
+    даёт свой отчёт, а прежний остаётся историей и служит «предыдущим».
+    """
+    days = [json.loads(line)["observed_at"][:10]
+            for f in sorted(glob.glob(str(ROOT / "data" / "snapshots" / "*.jsonl")))
+            for line in Path(f).read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not days:
+        raise RuntimeError("в data/snapshots нет наблюдений — отчёт не за что строить")
+    return max(days)
 
 
 def _jsonl(path):
@@ -61,9 +76,10 @@ def build(write=True):
     content_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     run_id = str(uuid.uuid5(RUN_NS, content_hash))
 
-    report_path = REPORT_DIR / f"{PERIOD}.md"
+    per = period()
+    report_path = REPORT_DIR / f"{per}.md"
     previous = daily.read_previous(_previous_report(report_path))
-    md = daily.build(PERIOD, ins, blocked, d["account"], d["coverage"],
+    md = daily.build(per, ins, blocked, d["account"], d["coverage"],
                      experiments=[], hashes=hashes, previous=previous,
                      n_videos=len(d["videos"]))
 
@@ -77,7 +93,7 @@ def build(write=True):
         report_path.write_text(md, encoding="utf-8")
         (OUT / "manifest.json").write_text(json.dumps({
             "insights_hash": content_hash, "insights_run_id": run_id,
-            "period": PERIOD, "n_insights": len(ins), "n_blocked": len(blocked),
+            "period": per, "n_insights": len(ins), "n_blocked": len(blocked),
             "input_hashes": hashes,
             "policy_version": P.INSIGHTS_POLICY_VERSION,
             "report_path": str(report_path.relative_to(ROOT)),
@@ -127,7 +143,7 @@ def load_to_db(ins, blocked, run_id, md_path, coverage_rows, n_videos):
               blocked_conclusions, run_id)
             VALUES (%s,'daily',%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
             ON CONFLICT (account_id, report_type, period_start, period_end, run_id) DO NOTHING""",
-            (account_id, PERIOD, PERIOD, now, md_path,
+            (account_id, period(), period(), now, md_path,
              f"FACT: 0 · HYPOTHESIS: {sum(1 for x in ins if x['claim_type']=='HYPOTHESIS')}"
              f" · заблокировано выводов: {len(blocked)}",
              n_videos, 0,
@@ -148,9 +164,9 @@ if __name__ == "__main__":
         print(f"  {k:<18}{v}")
     print(f"\ninsights_hash: {h}")
     print(f"insights_run_id: {run_id}")
-    print(f"отчёт: reports/daily/{PERIOD}.md ({len(md.splitlines())} строк)")
+    print(f"отчёт: reports/daily/{period()}.md ({len(md.splitlines())} строк)")
     if "--load" in sys.argv:
         d = load_inputs()
-        a, b = load_to_db(ins, blocked, run_id, f"reports/daily/{PERIOD}.md",
+        a, b = load_to_db(ins, blocked, run_id, f"reports/daily/{period()}.md",
                           d["coverage"], len(d["videos"]))
         print(f"записано: insights +{a}, reports +{b}")

@@ -1,127 +1,127 @@
 {
   "by_absence_reason": {
-    "asset_not_supplied": 240,
-    "no_ocr_extractor": 48,
-    "no_validated_detector": 96
+    "asset_not_supplied": 255,
+    "no_ocr_extractor": 51,
+    "no_validated_detector": 102
   },
   "by_feature": {
     "aspect_ratio": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "asset_duration_sec": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "asset_height": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "asset_width": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "audio_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "audio",
       "present": 0
     },
     "average_shot_duration": {
-      "absent": 16,
+      "absent": 17,
       "group": "visual_structure",
       "present": 0
     },
     "face_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "human",
       "present": 0
     },
     "first_frame_type": {
-      "absent": 16,
+      "absent": 17,
       "group": "visual_structure",
       "present": 0
     },
     "fps": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "frame_count": {
-      "absent": 16,
+      "absent": 17,
       "group": "technical",
       "present": 0
     },
     "music_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "audio",
       "present": 0
     },
     "ocr_available": {
-      "absent": 16,
+      "absent": 17,
       "group": "on_screen_text",
       "present": 0
     },
     "ocr_confidence_summary": {
-      "absent": 16,
+      "absent": 17,
       "group": "on_screen_text",
       "present": 0
     },
     "opening_duration_sec": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "opening_person_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "opening_scene_change": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "opening_speech_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "opening_text_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "opening_visual_presence": {
-      "absent": 16,
+      "absent": 17,
       "group": "opening",
       "present": 0
     },
     "person_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "human",
       "present": 0
     },
     "scene_change_count": {
-      "absent": 16,
+      "absent": 17,
       "group": "visual_structure",
       "present": 0
     },
     "shot_count": {
-      "absent": 16,
+      "absent": 17,
       "group": "visual_structure",
       "present": 0
     },
     "speech_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "audio",
       "present": 0
     },
     "text_present": {
-      "absent": 16,
+      "absent": 17,
       "group": "on_screen_text",
       "present": 0
     }
@@ -286,13 +286,23 @@
       "statuses": {
         "unavailable": 24
       }
+    },
+    "7687082909278145824": {
+      "absent": 24,
+      "asset_sha256": null,
+      "asset_status": "missing",
+      "asset_version": 1,
+      "present": 0,
+      "statuses": {
+        "unavailable": 24
+      }
     }
   },
   "extractor_version": "tier1-probe-1.0.0+cv2=5.0.0+numpy=2.4.6+ffmpeg=7.0.2-static",
   "feature_fill_rate": 0.0,
   "hashes": {
-    "asset": "d1de44f5d95543676e252d57481f241b38aab2e9f463804c924df8679cbb3ea7",
-    "tier1": "d1ca25c17ec6993e5d8618a17bfafa0b3044bb87a939880a862f2533b8a6d4a3"
+    "asset": "f6340bbc0d29e0b3192cfa91befd7d672547b8027f5dd468a3195dcea9bd06ab",
+    "tier1": "936d91bb3fb5aa0abec4521c8894e929e6f83e81b5c67d1be8a3ce7171f01eda"
   },
   "incoming_scan": {
     "ambiguous": {},
@@ -303,11 +313,11 @@
     "unmatched": [],
     "unsupported": []
   },
-  "n_feature_rows": 384,
-  "n_features_absent": 384,
+  "n_feature_rows": 408,
+  "n_features_absent": 408,
   "n_features_declared": 24,
   "n_features_with_value": 0,
-  "n_videos": 16,
+  "n_videos": 17,
   "n_videos_with_current_asset": 0,
   "policy_version": "visual-feature-policy-1.0.0",
   "video_asset_status": "UNAVAILABLE"

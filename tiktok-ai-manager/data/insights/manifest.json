@@ -1,14 +1,14 @@
 {
   "input_hashes": {
-    "analytics": "52fa355f77987c7aa8479e18a89616cd6c2b8e36dfaf49c477e2eca7b35d474f",
-    "features": "71075aaf4170be7b6b43abde9126227e621274ed6570839e5b37f23b42f3bd6b",
-    "reconciliation": "f52205acef19ba5082f192e7206ff9faa3917cde3be0e970f7afb4e0202506cf"
+    "analytics": "88800c0b779aef6ccfbc3398752be30760d54d81bdb8bc9876648ee5ad4c0846",
+    "features": "631999988be9d2302c5e098217627f8616c144598b55f674f5027ff1725780b3",
+    "reconciliation": "fd98b3114568b023f83c132ed9d544b1b02f69d7c575dbce0d78bdbf3303b645"
   },
-  "insights_hash": "d22e195409886f8e9fc563600b4ad61eb4aac0db299978390550cbcc13e92802",
-  "insights_run_id": "8d5cc4ed-3c8b-5e75-b005-ef843a8fe9b9",
-  "n_blocked": 28,
-  "n_insights": 11,
-  "period": "2026-09-17",
+  "insights_hash": "35e4320dc54ed67f13844be5672ae849340e6ad2ee49edc7e128073a5c2867a8",
+  "insights_run_id": "3004e5d2-9a95-51f2-aba8-d74ee206cb0a",
+  "n_blocked": 31,
+  "n_insights": 14,
+  "period": "2026-10-08",
   "policy_version": "insights-policy-1.0.0",
-  "report_path": "reports/daily/2026-09-17.md"
+  "report_path": "reports/daily/2026-10-08.md"
 }
