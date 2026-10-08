@@ -80,6 +80,8 @@ echo; echo "=== 11к. советник и меню (без обращения к
 
 echo; echo "=== 11л. журнал экспериментов (настоящий не пишется) ==="; python3 tests/test_experiments.py | tail -2
 
+echo; echo "=== 11м. дашборд (экранирование, без браузера) ==="; TIKTOK_NO_BROWSER=1 python3 tests/test_dashboard.py | tail -2
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6

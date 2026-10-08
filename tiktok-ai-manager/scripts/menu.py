@@ -87,6 +87,11 @@ def experiments(ask):
             print(f"нет пункта «{c}»")
 
 
+def dashboard(ask):
+    from advisor import dashboard as D
+    D.main([])
+
+
 def ingest(ask):
     print("Видео берутся из data\\assets\\incoming, имя файла = video_id.mp4\n")
     _sub("-m", "assets.ingest", "--load")
@@ -112,9 +117,10 @@ ITEMS = (
     ("3", "Что залетело и почему", analyze),
     ("4", "Идеи для следующих видео", ideas),
     ("5", "Эксперименты: взять идею, привязать ролик, итоги", experiments),
-    ("6", "Загрузить видео из data\\assets\\incoming", ingest),
-    ("7", "Полная проверка (verify_all)", verify),
-    ("8", "Миграции (--adopt)", migrate),
+    ("6", "Дашборд в браузере", dashboard),
+    ("7", "Загрузить видео из data\\assets\\incoming", ingest),
+    ("8", "Полная проверка (verify_all)", verify),
+    ("9", "Миграции (--adopt)", migrate),
     ("0", "Выход", None),
 )
 

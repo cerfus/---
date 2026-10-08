@@ -338,7 +338,7 @@ def run_all(real_make_client):
     check("G3 неизвестный пункт назван", "нет пункта «42»" in out_)
     rc, out_ = menu("3\n\n0\n")
     check("G4 пункт 3 показывает разбор", "ЧТО ЗАЛЕТЕЛО" in out_ and "HYPOTHESIS" in out_)
-    rc, out_ = menu("8\nнет\n\n0\n")
+    rc, out_ = menu("9\nнет\n\n0\n")
     check("G5 миграции без «да» не запускаются",
           "отменено" in out_ and "Миграции" in out_)
     src = (ROOT / "scripts" / "menu.py").read_text(encoding="utf-8")
@@ -347,7 +347,7 @@ def run_all(real_make_client):
     check("G7 каждый пункт описан и пронумерован",
           [k for k, _, _ in __import__("importlib").import_module("runpy").run_path(
               str(ROOT / "scripts" / "menu.py"))["ITEMS"]]
-          == ["1", "2", "3", "4", "5", "6", "7", "8", "0"])
+          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
 
     print("\n=== H. menu.bat пригоден для cmd.exe ===")
     bat_b = (ROOT / "scripts" / "menu.bat").read_bytes()
