@@ -54,7 +54,7 @@ def checks():
         add(OK, "часовые пояса (московское время в разборе)")
     except Exception:
         add(WARN, "часовые пояса недоступны — разбор без московского времени",
-            "pip install tzdata")
+            "python -m pip install -r requirements.txt")
 
     try:
         import psycopg                                     # noqa: F401
@@ -63,7 +63,7 @@ def checks():
     except ImportError:
         has_pg = False
         add(WARN, "нет драйвера PostgreSQL — статус и отчёт из базы недоступны, "
-                  "разбор, идеи и дашборд работают", 'pip install "psycopg[binary]"')
+                  "разбор, идеи и дашборд работают", "python -m pip install -r requirements.txt")
 
     env = ROOT / ".env"
     if not env.exists() and not os.environ.get("TIKTOK_DSN_RO"):
@@ -110,7 +110,7 @@ def checks():
             "" if key else "по желанию: ANTHROPIC_API_KEY в .env")
     except ImportError:
         add(INFO, "идеи от модели Claude не подключены — идеи шаблонами",
-            "по желанию: pip install -r requirements-advisor.txt")
+            "по желанию: python -m pip install -r requirements-advisor.txt")
     return out
 
 

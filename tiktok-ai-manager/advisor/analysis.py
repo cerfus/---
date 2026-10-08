@@ -109,7 +109,7 @@ def context(root=ROOT):
         ctx["tz"] = ctx["grid_tz"] = None
         ctx["tz_note"] = (f"база часовых поясов недоступна ({type(exc).__name__}): "
                           "местное время и активность аудитории не считаются; "
-                          "на Windows — pip install tzdata")
+                          "на Windows нужен пакет tzdata: python -m pip install -r requirements.txt")
     return ctx
 
 

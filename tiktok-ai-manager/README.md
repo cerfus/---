@@ -56,7 +56,7 @@ bash scripts/verify_all.sh          # пересборка с нуля + все 
 
 ```cmd
 git pull
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Если `git pull` пишет *Your local changes … would be overwritten*: это
@@ -87,7 +87,7 @@ scripts\verify_all.bat              REM все проверки, БД не пе�
   ролики (< 30 дней) со зрелыми не сравниваются; признак становится
   гипотезой, только если отделяет хиты от остальных.
 * **Идеи** — с ключом `ANTHROPIC_API_KEY` в `.env` и пакетом
-  `pip install -r requirements-advisor.txt` их придумывает модель Claude
+  `python -m pip install -r requirements-advisor.txt` их придумывает модель Claude
   (`claude-opus-5-5`); без ключа — шаблоны экспериментов, бесплатно.
   Ответ модели проходит проверку: идея без проверяемой гипотезы, с числом,
   которого нет в данных, или с обещанием результата отбрасывается, и

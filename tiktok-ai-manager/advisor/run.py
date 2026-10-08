@@ -41,6 +41,16 @@ def main(argv=None):
         if not args.offline:
             print("Готовлю идеи. С моделью это до пары минут…", flush=True)
         r = I.generate(a, offline=args.offline)
+        if r["mode"] == "template":
+            from advisor import experiments as E
+            path, saved = E.latest_ideas(args.out)
+            if saved and path is not None:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+                if doc.get("mode") != "template":
+                    print(f"Сохранённые идеи ({doc.get('model') or doc.get('mode')}, "
+                          f"{path.name}):\n")
+                    print(I.render(doc))
+                    print("\n" + "─" * 60 + "\nНиже — шаблоны экспериментов без модели:\n")
     print(I.render(r))
     j, t = I.save(r, args.out)
     print(f"\nсохранено: {t}")

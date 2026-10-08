@@ -295,11 +295,16 @@ def latest_ideas(ideas_dir=None):
     files = sorted(Path(ideas_dir or IDEAS_DIR).glob("*.json"))
     if not files:
         return None, []
-    data = json.loads(files[-1].read_text(encoding="utf-8"))
+    # Последние НАСТОЯЩИЕ идеи (модель или сессия) важнее последних
+    # шаблонов: иначе один запуск пункта 4 без ключа прятал бы хорошие идеи
+    # от экспериментов, /next и дашборда. Шаблоны — только если других нет.
+    docs = [(f, json.loads(f.read_text(encoding="utf-8"))) for f in files]
+    real = [(f, d) for f, d in docs if d.get("mode") != "template" and d.get("ideas")]
+    path, data = (real or docs)[-1]
     ideas = data.get("ideas", [])
     for i in ideas:
         i["_new_hypotheses"] = data.get("new_hypotheses", [])
-    return files[-1], ideas
+    return path, ideas
 
 
 def main(argv=None):

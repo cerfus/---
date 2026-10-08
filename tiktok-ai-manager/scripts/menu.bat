@@ -33,4 +33,8 @@ exit /b 2
 
 :found
 %PY% scripts\menu.py %*
-exit /b %errorlevel%
+set "RC=%errorlevel%"
+REM On an error keep the window open: a double-clicked window would
+REM otherwise close before the message could be read.
+if not "%RC%"=="0" pause
+exit /b %RC%

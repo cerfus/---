@@ -175,6 +175,19 @@ def main():
                        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     check("F1 пункт 5 → 1 показывает журнал", "EXP-003" in p.stdout and p.returncode == 0)
 
+    print("\n=== G. какие идеи считаются последними ===")
+    d = Path(tempfile.mkdtemp())
+    (d / "20261001T000000_session.json").write_text(json.dumps(
+        {"mode": "session", "ideas": [{"title": "настоящая"}]}, ensure_ascii=False), encoding="utf-8")
+    (d / "20261002T000000_template.json").write_text(json.dumps(
+        {"mode": "template", "ideas": [{"title": "шаблон"}]}, ensure_ascii=False), encoding="utf-8")
+    path, ideas = E.latest_ideas(d)
+    check("G1 более новые шаблоны не прячут настоящие идеи",
+          [i["title"] for i in ideas] == ["настоящая"], path.name if path else "—")
+    (d / "20261001T000000_session.json").unlink()
+    path, ideas = E.latest_ideas(d)
+    check("G2 если настоящих нет — берутся шаблоны", [i["title"] for i in ideas] == ["шаблон"])
+
     check("Z1 настоящий журнал не изменён тестом ни байтом", sha(REAL) == real_before)
 
     failed = [n for n, ok in RESULTS if not ok]

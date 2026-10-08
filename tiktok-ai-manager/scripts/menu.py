@@ -28,6 +28,16 @@ def _sub(*args):
         return 130
 
 
+YES = {"да", "д", "y", "yes"}
+
+
+def confirmed(answer):
+    """Согласие. Латинское y принимается наравне с «да»: ввод кириллицы —
+    самое хрупкое место консоли Windows, и подтверждение не должно на нём
+    застревать."""
+    return (answer or "").strip().lower() in YES
+
+
 def status(ask):
     from mobile import commands as C
     print(C.REGISTRY["/status"].handler(None))
@@ -113,7 +123,7 @@ def verify(ask):
 def migrate(ask):
     print("Миграции: применяются недостающие, уже применённые признаются.")
     print("Данные не удаляются. Повторный запуск безопасен.")
-    if (ask("Продолжить? Введите да: ") or "").strip().lower() != "да":
+    if not confirmed(ask("Продолжить? Введите да (или y): ")):
         print("отменено")
         return
     if _sub("db/migrate.py", "--adopt") == 0:
