@@ -178,6 +178,35 @@ def render(plan, analysis, ctx, source=None, states=None):
     return "\n".join(L)
 
 
+def today(ideas, analysis, ctx=None, states=None, start=None):
+    """Строки «что делать сейчас» для экрана запуска: ближайшая публикация
+    по плану и эксперименты, у которых готов итог. Ничего не пишет."""
+    ctx = A.context() if ctx is None else ctx
+    states = E.load() if states is None else states
+    L = []
+    if not ideas:
+        L.append("Идей нет — пункт 4 «Идеи для следующих видео».")
+    else:
+        rows = [r for r in build(ideas, analysis, start=start, ctx=ctx, states=states)
+                if r["at"]]
+        if rows:
+            r = rows[0]
+            when = f"{_fmt_local(r['at'], ctx)} ({r['at']:%H:%M} UTC)"
+            L.append(f"Ближайшая публикация: {when} — «{r['idea'].get('title')}» "
+                     f"(проверяет {r['hypothesis']}).")
+            L.append(f"  уже в работе {r['taken']}: после публикации — пункт 5 → 3"
+                     if r.get("taken") else
+                     f"  сначала пункт 5 → 2, идея №{r['n']}; после публикации — 5 → 3")
+        else:
+            L.append("В плане пусто — пункт 4: новые идеи.")
+    ready = [code for code, st in sorted(states.items()) if st["status"] in E.OPEN
+             for ev in [E.evaluate(st, analysis, ctx=ctx)]
+             if ev.get("rule") and ev["rule"][0] != "inconclusive"]
+    if ready:
+        L.append(f"Готов итог: {', '.join(ready)} — пункт 5 → 4.")
+    return L
+
+
 def progress(plan, states=None):
     """Сколько роликов ещё нужно каждому открытому эксперименту и хватает ли
     под это идей в плане. Строки текста; пусто — открытых экспериментов нет."""

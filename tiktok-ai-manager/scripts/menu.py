@@ -206,6 +206,16 @@ def _startup_check():
         return f"  (проверка готовности не выполнилась: {type(exc).__name__})"
 
 
+def _startup_today():
+    """Что делать сейчас — из плана и журнала. Не должно ронять меню."""
+    try:
+        from advisor import analysis as A, experiments as E, plan as P
+        _path, ideas = E.latest_ideas()
+        return "\n".join("  " + l for l in P.today(ideas, A.analyze()))
+    except Exception as exc:
+        return f"  (план на сегодня не посчитался: {type(exc).__name__})"
+
+
 def draw():
     print(f"\n ===== {TITLE} =====\n")
     for key, label, _ in ITEMS:
@@ -222,6 +232,7 @@ def main(ask=input):
 
     actions = {k: fn for k, _, fn in ITEMS}
     print("\n" + _startup_check())
+    print("\n" + _startup_today())
     while True:
         draw()
         choice = safe_ask("  Выбор > ")

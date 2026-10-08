@@ -210,6 +210,36 @@ def main():
           not any(first["title"][:20] in l for l in gl if l.startswith("SUMMARY:"))
           and lines.count("BEGIN:VEVENT") - gl.count("BEGIN:VEVENT") == 2)
 
+    print("\n=== T. что делать сейчас ===")
+    tl = P.today(ideas, a, ctx=ctx, states={}, start=START)
+    first = [r for r in P.build(ideas, a, start=START, ctx=ctx, states={}) if r["at"]][0]
+    check("T1 ближайшая публикация — первая строка плана, с шагом «5 → 2»",
+          f"«{first['idea']['title']}»" in tl[0] and P._fmt_local(first["at"], ctx) in tl[0]
+          and f"идея №{first['n']}" in tl[1], tl[:2])
+    tl = P.today(ideas, a, ctx=ctx, states=st, start=START)
+    first_t = [r for r in P.build(ideas, a, start=START, ctx=ctx, states=st) if r["at"]][0]
+    check("T2 ближайшая уже взята в работу — «после публикации 5 → 3», без «5 → 2»",
+          first_t["taken"] == c2 and f"уже в работе {c2}" in tl[1] and "5 → 2" not in tl[1],
+          tl[:2])
+    saved_ev = E.evaluate
+    fake_states = {"EXP-009": {"status": "running"}, "EXP-010": {"status": "running"},
+                   "EXP-011": {"status": "concluded"}}
+    verdicts = {"EXP-009": ("supported", "x"), "EXP-010": ("inconclusive", "y"),
+                "EXP-011": ("supported", "z")}
+    E.evaluate = lambda st_, an, videos=None, ctx=None: {
+        "rule": verdicts[next(k for k, v in fake_states.items() if v is st_)]}
+    try:
+        tl5 = P.today([], a, ctx=ctx, states=fake_states)
+    finally:
+        E.evaluate = saved_ev
+    check("T5 готовый итог назван (только открытые и не inconclusive)",
+          "Готов итог: EXP-009 — пункт 5 → 4." in tl5
+          and not any("EXP-010" in l or "EXP-011" in l for l in tl5), tl5)
+    check("T3 нет идей — указан пункт 4", P.today([], a, ctx=ctx, states={})[0].startswith("Идей нет"))
+    viol = [l for l in P.today(ideas, a, ctx=ctx, states={}, start=START)
+            if find_violations(l, "RECOMMENDATION")]
+    check("T4 строки проходят валидатор формулировок", not viol, str(viol))
+
     print("\n=== F. запуск ===")
     out = Path(tempfile.mkdtemp()) / "plan.ics"
     p = subprocess.run([sys.executable, "-m", "advisor.plan", "--start", "2026-10-09",
@@ -226,6 +256,7 @@ def main():
                        input=f"{key}\n\n0\n", capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=120,
                        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    check("F2a при запуске меню — ближайшая публикация", "Ближайшая публикация:" in p.stdout)
     check("F2 пункт меню показывает план и путь к календарю",
           p.returncode == 0 and "ПЛАН ПУБЛИКАЦИЙ" in p.stdout and "Календарь:" in p.stdout)
     from mobile import commands as C
