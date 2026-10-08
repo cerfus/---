@@ -42,6 +42,8 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)(postgres(?:ql)?://[^:/@\s]+:)[^@\s]+@"),
     # Bearer-заголовок
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-]{8,}"),
+    # ключ Anthropic API (советник, advisor/ideas.py): sk-ant-…
+    re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{10,}"),
 )
 
 

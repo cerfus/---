@@ -385,6 +385,7 @@ TESTS = [
     ("11е",  "тесты Phase 6 (ассеты и Tier 1)",           "tests/test_phase6_assets.py"),
     ("11ж",  "тесты Phase 6.5 (мобильный пульт)",         "tests/test_phase65_mobile.py"),
     ("11и",  "переносимая сборка не беднее оболочечной",  "tests/test_verify_all_portable.py"),
+    ("11к",  "советник и меню (без обращения к API)",     "tests/test_advisor.py"),
 ]
 
 

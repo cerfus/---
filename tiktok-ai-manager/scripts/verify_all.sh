@@ -76,6 +76,8 @@ python3 -m mobile.verify | sed 's/^/  /'
 
 echo; echo "=== 11и. переносимая сборка не беднее этой ==="; python3 tests/test_verify_all_portable.py | tail -2
 
+echo; echo "=== 11к. советник и меню (без обращения к API) ==="; python3 tests/test_advisor.py | tail -2
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6
