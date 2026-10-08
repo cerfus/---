@@ -92,6 +92,15 @@ def dashboard(ask):
     D.main([])
 
 
+def sync(ask):
+    print("Дозагрузка в базу всего, что пришло с git pull. Ничего не удаляется.\n")
+    _sub("scripts/sync_db.py")
+
+
+def doctor(ask):
+    _sub("scripts/doctor.py")
+
+
 def ingest(ask):
     print("Видео берутся из data\\assets\\incoming, имя файла = video_id.mp4\n")
     _sub("-m", "assets.ingest", "--load")
@@ -119,16 +128,30 @@ ITEMS = (
     ("5", "Эксперименты: взять идею, привязать ролик, итоги", experiments),
     ("6", "Дашборд в браузере", dashboard),
     ("7", "Загрузить видео из data\\assets\\incoming", ingest),
-    ("8", "Полная проверка (verify_all)", verify),
-    ("9", "Миграции (--adopt)", migrate),
+    ("8", "Обновить базу после git pull", sync),
+    ("9", "Готовность программы", doctor),
+    ("10", "Полная проверка (verify_all)", verify),
+    ("11", "Миграции (--adopt)", migrate),
     ("0", "Выход", None),
 )
+
+
+def _startup_check():
+    """Короткая проверка готовности при запуске: только то, что мешает."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("doctor", ROOT / "scripts" / "doctor.py")
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+        return mod.render(mod.checks(), brief=True)
+    except Exception as exc:                     # проверка не должна ронять меню
+        return f"  (проверка готовности не выполнилась: {type(exc).__name__})"
 
 
 def draw():
     print(f"\n ===== {TITLE} =====\n")
     for key, label, _ in ITEMS:
-        print(f"  {key}  {label}")
+        print(f"  {key:>2}  {label}")
     print()
 
 
@@ -140,6 +163,7 @@ def main(ask=input):
             return None
 
     actions = {k: fn for k, _, fn in ITEMS}
+    print("\n" + _startup_check())
     while True:
         draw()
         choice = safe_ask("  Выбор > ")

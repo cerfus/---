@@ -389,6 +389,7 @@ TESTS = [
     ("11л",  "журнал экспериментов (настоящий не пишется)", "tests/test_experiments.py"),
     ("11м",  "дашборд (экранирование, без браузера)",      "tests/test_dashboard.py"),
     ("11н",  "импорт выгрузок в raw/v1",                  "tests/test_import_export.py"),
+    ("11о",  "готовность программы и обновление базы",    "tests/test_doctor_sync.py"),
 ]
 
 
