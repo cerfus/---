@@ -313,7 +313,7 @@ def main(argv=None):
     import argparse
     from mobile.audit import scrub
     ap = argparse.ArgumentParser(description="План публикаций и календарь .ics.")
-    ap.add_argument("--start", help="первый день плана, ГГГГ-ММ-ДД (по умолчанию завтра)")
+    ap.add_argument("--start", help="первый день плана, ГГГГ-ММ-ДД (по умолчанию сегодня, слоты не раньше чем через 2 ч)")
     ap.add_argument("--no-ics", action="store_true", help="не писать календарь")
     ap.add_argument("--out", help=f"куда писать календарь (по умолчанию {ICS_PATH})")
     args = ap.parse_args(argv)
