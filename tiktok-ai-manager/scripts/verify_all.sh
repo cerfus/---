@@ -90,6 +90,8 @@ echo; echo "=== 11п. план публикаций и календарь .ics =
 
 echo; echo "=== 11р. обновление программы из GitHub ==="; python3 tests/test_update.py | tail -2
 
+echo; echo "=== 11с. пересчёт эталонов только при неизменном коде ==="; python3 tests/test_rebaseline.py | tail -2
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6
