@@ -50,6 +50,10 @@ REGISTER = ROOT / "experiments" / "register.jsonl"
 IDEAS_DIR = ROOT / "data" / "ideas"
 MATURITY_DAYS = A.MATURE_AGE_DAYS
 DEFAULT_MIN_SAMPLE = 5          # тот же нижний порог, что CHECK в таблице experiments
+# Правило итога записывается при регистрации — ДО результата. Итог потом
+# выносит правило, а не взгляд на цифры: иначе это подгонка.
+DECISION_RULE = "median-vs-base-and-control-v1"
+MIN_CONTROL = 3                 # меньше роликов в контроле — контроля нет
 OPEN = ("proposed", "preregistered", "running", "partially_concluded")
 
 
@@ -184,6 +188,7 @@ def register_idea(idea, analysis, path=REGISTER, now=None):
         "hypothesis_id": hid, "hypothesis": statement,
         "idea": card,
         "condition": condition,
+        "decision_rule": DECISION_RULE,
         "success_check": idea.get("success_check"),
         "min_sample": DEFAULT_MIN_SAMPLE, "maturity_days": MATURITY_DAYS,
         # база сравнения фиксируется В МОМЕНТ регистрации: потом её не
@@ -343,6 +348,56 @@ def control(st, analysis, videos, ctx=None):
             "label": f"{cond.get('label')}: не {cond.get('value')}"}
 
 
+def rule_verdict(st, mine, base, ctl, n):
+    """(итог, пояснение) по правилу, записанному при регистрации, или None.
+
+    supported     — медиана эксперимента выше и базы, и контроля того же
+                    периода (в контроле не меньше MIN_CONTROL роликов);
+    not_supported — не выше базы, либо выше базы, но не выше контроля
+                    (вырос весь аккаунт, а не ролики в условии);
+    inconclusive  — выше базы, а контроля нет или он меньше MIN_CONTROL:
+                    общий рост аккаунта не исключён. Эксперимент не
+                    закрывается — нужны ролики вне условия в тот же период.
+    """
+    if st["base"].get("decision_rule") != DECISION_RULE:
+        return None
+    tail = f", n={n}. Причинность не установлена."
+    if mine <= base:
+        return ("not_supported", f"медиана эксперимента {A._num(mine)} не выше медианы "
+                                 f"базы {A._num(base)}" + tail)
+    if ctl is None or ctl["n"] < MIN_CONTROL:
+        k = 0 if ctl is None else ctl["n"]
+        return ("inconclusive", f"медиана эксперимента {A._num(mine)} выше базы "
+                                f"{A._num(base)}, но роликов того же периода вне условия "
+                                f"{k} из {MIN_CONTROL} нужных: общий рост аккаунта не "
+                                "исключён" + tail)
+    if mine <= ctl["median"]:
+        return ("not_supported", f"медиана эксперимента {A._num(mine)} выше базы "
+                                 f"{A._num(base)}, но не выше контроля того же периода "
+                                 f"{A._num(ctl['median'])} (n={ctl['n']}): вырос весь "
+                                 "аккаунт, а не ролики в условии" + tail)
+    return ("supported", f"медиана эксперимента {A._num(mine)} выше базы {A._num(base)} "
+                         f"и контроля того же периода {A._num(ctl['median'])} "
+                         f"(n={ctl['n']})" + tail)
+
+
+def conclude_by_rule(code, analysis, path=REGISTER, now=None, videos=None, ctx=None):
+    """(True, текст) — закрыт по правилу; (False, причина) — не закрыт."""
+    st = load(path).get(code)
+    if st is None or st["status"] not in OPEN:
+        return False, f"{code}: нет открытого эксперимента с таким кодом"
+    ev = evaluate(st, analysis, videos, ctx)
+    if ev["n_mature"] < (ev.get("min_sample") or DEFAULT_MIN_SAMPLE):
+        return False, f"{code}: итога пока нет — {ev.get('summary')}"
+    if ev.get("rule") is None:
+        return False, f"{code}: правило итога не записано при регистрации — итог вручную"
+    verdict, text = ev["rule"]
+    if verdict == "inconclusive":
+        return False, f"{code} остаётся открытым: {text}"
+    conclude(code, verdict, text, f"наблюдения на {analysis.get('observed_at')}", path, now)
+    return True, f"{code} закрыт: {verdict} — {text}"
+
+
 def evaluate(st, analysis, videos=None, ctx=None):
     """Состояние эксперимента в цифрах. Ничего не пишет."""
     out = {"code": st["code"], "status": st["status"], "videos": [],
@@ -406,6 +461,8 @@ def evaluate(st, analysis, videos=None, ctx=None):
                         if "views" in r and r["age_days"] >= MATURITY_DAYS]
         ctl = control(st, analysis, videos, ctx)
         out["control"] = ctl
+        out["rule"] = rule_verdict(st, statistics.median(mature_views), base, ctl,
+                                   out["n_mature"])
         if ctl is not None:
             mine = statistics.median(mature_views)
             out["summary"] += (
@@ -444,6 +501,10 @@ def render(states, analysis, videos=None):
                 views = f"{row['views']} просм., {row['age_days']} дн. · " if "views" in row else ""
                 L.append(f"    ролик {row['video_id']}: {views}{row['state']}")
             L.append(f"    {ev['summary']}")
+            if ev.get("rule"):
+                L.append(f"    итог по правилу: {ev['rule'][0]} — {ev['rule'][1]}"
+                         + ("" if ev["rule"][0] == "inconclusive"
+                            else " · закрыть: меню 5 → 4"))
         L.append("")
     return "\n".join(L).rstrip()
 

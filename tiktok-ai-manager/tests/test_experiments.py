@@ -175,6 +175,12 @@ def main():
                        encoding="utf-8", errors="replace", timeout=120,
                        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     check("F1 пункт 5 → 1 показывает журнал", "EXP-003" in p.stdout and p.returncode == 0)
+    p = subprocess.run([sys.executable, "scripts/menu.py"], cwd=str(ROOT),
+                       input="5\n4\n0\n\n0\n", capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=120,
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    check("F2 пункт 5 → 4 без готовых экспериментов объясняет, когда будет итог",
+          p.returncode == 0 and "итога пока нет ни у одного" in p.stdout)
 
     print("\n=== P. привязка до прихода выгрузки ===")
     real_v = E._videos()
@@ -346,6 +352,65 @@ def main():
     ev = E.evaluate(E.load(tmp8)[cy], stub, videos=vids, ctx=ctx)
     check("V7 условие не записано — контроль не выдумывается",
           ev["control"] is None and "контрол" not in ev["summary"])
+
+    print("\n=== R. итог по правилу, записанному заранее ===")
+    check("R1 правило итога записано при регистрации",
+          E.load(tmp7)[cx]["base"].get("decision_rule") == E.DECISION_RULE)
+
+    def scenario(linked_views, control_views, label):
+        reg = Path(tempfile.mkdtemp()) / f"{label}.jsonl"
+        code = E.register_idea(h1_idea, a_real, reg, now="2026-10-01T00:00:00+00:00")
+        vv, ob = {}, []
+        for i, views in enumerate(linked_views + control_views):
+            linked = i < len(linked_views)
+            hour = 20 if linked else 12
+            vv[vid(100 + i)] = {"video_id": vid(100 + i), "caption": "",
+                                "published_at": f"2026-10-{2 + i:02d}T{hour}:00:00+00:00"}
+            ob.append({"video_id": vid(100 + i), "views": views, "age_days": 40,
+                       "observed_at": "2026-12-01T00:00:00+00:00", "verified_views": None,
+                       "verified_at": None, "url": "", "source": "metricool", "caption": ""})
+            if linked:
+                E.link(code, vid(100 + i), reg, videos=vv)
+        an = analysis_stub(1000, unverified=ob)
+        ev = E.evaluate(E.load(reg)[code], an, videos=vv, ctx=ctx)
+        ev["rule"] = ev.get("rule") or ("нет правила", "")   # провал, а не падение
+        return reg, code, an, vv, ev
+
+    _r, _c, _a, _v, ev = scenario([500, 600, 700, 800, 900], [400, 450, 500], "low")
+    check("R2 не выше базы — not_supported", ev["rule"][0] == "not_supported", ev["rule"][1])
+    _r, _c, _a, _v, ev = scenario([2000] * 5, [3000, 3100, 3200], "allup")
+    check("R3 выше базы, но не выше контроля — not_supported: вырос весь аккаунт",
+          ev["rule"][0] == "not_supported" and "весь аккаунт" in ev["rule"][1], ev["rule"][1])
+    reg, code, an, vv, ev = scenario([2000] * 5, [500, 600], "fewctl")
+    ok, msg = E.conclude_by_rule(code, an, reg, videos=vv, ctx=ctx)
+    check("R4 контроля меньше 3 — inconclusive, эксперимент остаётся открытым",
+          ev["rule"][0] == "inconclusive" and not ok
+          and E.load(reg)[code]["status"] == "running", msg)
+    reg, code, an, vv, ev = scenario([2000, 2100, 2200, 2300, 2400], [500, 700, 900], "good")
+    ok, msg = E.conclude_by_rule(code, an, reg, videos=vv, ctx=ctx)
+    st = E.load(reg)[code]
+    check("R5 выше базы и контроля — supported, закрыт с текстом правила",
+          ok and st["status"] == "concluded" and st["verdict"] == "supported"
+          and "n=5" in st["result"] and "Причинность не установлена" in st["result"], msg)
+    texts = [scenario(*args)[4]["rule"][1] for args in
+             (([500] * 5, [400] * 3, "t1"), ([2000] * 5, [3000] * 3, "t2"),
+              ([2000] * 5, [500], "t3"), ([2000] * 5, [500] * 3, "t4"))]
+    viol = [t for t in texts if find_violations(t, "RECOMMENDATION")]
+    check("R6 все четыре формулировки итога проходят валидатор", not viol, str(viol[:1]))
+    legacy = Path(tempfile.mkdtemp()) / "legacy.jsonl"
+    lc = E.register_idea(IDEA, analysis_stub(1000), legacy, now="2026-10-01T00:00:00+00:00")
+    rows = [json.loads(l) for l in legacy.read_text(encoding="utf-8").splitlines()]
+    rows[-1].pop("decision_rule")
+    legacy.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                      encoding="utf-8")
+    for i in range(5):
+        E.link(lc, vid(i), legacy, videos=vids)
+    ok, msg = E.conclude_by_rule(lc, stub, legacy, videos=vids, ctx=ctx)
+    check("R7 регистрация без правила — итог по правилу не выносится", not ok
+          and "не записано" in msg, msg)
+    reg, code, an, vv, ev = scenario([2000] * 2, [500] * 3, "early")
+    ok, msg = E.conclude_by_rule(code, an, reg, videos=vv, ctx=ctx)
+    check("R8 меньше min_sample — не закрывается", not ok and "пока нет" in msg, msg)
 
     print("\n=== G. какие идеи считаются последними ===")
     d = Path(tempfile.mkdtemp())

@@ -65,6 +65,7 @@ def experiments(ask):
               "   1  Список и итоги\n"
               "   2  Взять идею в работу (до публикации!)\n"
               "   3  Привязать опубликованный ролик\n"
+              "   4  Подвести итог (по правилу, записанному при регистрации)\n"
               "   0  Назад\n")
         c = ask("  Выбор > ")
         if c is None or c.strip() == "0":
@@ -98,6 +99,26 @@ def experiments(ask):
             ok, why = E.link(code, video)
             print((f"привязано к {code}" + (f" — {why}" if why else ""))
                   if ok else f"не привязано: {why}")
+        elif c == "4":
+            ready = [(code, ev) for code, st in sorted(E.load().items())
+                     if st["status"] in E.OPEN
+                     for ev in [E.evaluate(st, a)] if ev.get("rule")]
+            if not ready:
+                print("итога пока нет ни у одного эксперимента: нужно "
+                      f"{E.DEFAULT_MIN_SAMPLE} зрелых роликов (30 дней после публикации)")
+                continue
+            for code, ev in ready:
+                verdict, text = ev["rule"]
+                print(f"\n{code}: {verdict} — {text}")
+                if verdict == "inconclusive":
+                    print("  остаётся открытым: снимите ролики вне условия (нейтральные "
+                          "идеи плана)")
+                    continue
+                if confirmed(ask(f"  закрыть {code} с этим итогом? да / y: ")):
+                    ok, msg = E.conclude_by_rule(code, a)
+                    print("  " + msg)
+                else:
+                    print("  не закрыт")
         else:
             print(f"нет пункта «{c}»")
 
