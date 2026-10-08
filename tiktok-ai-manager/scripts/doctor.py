@@ -92,13 +92,20 @@ def checks():
                 add(WARN, f"база отстаёт от данных проекта: в базе {db_videos} роликов "
                           f"по {db_last_s[:10] or '—'}, в проекте {repo_videos} по "
                           f"{repo_last[:10]}",
-                    "меню → «Обновить базу после git pull»")
+                    "меню → «Обновить программу из GitHub» (или «Обновить базу "
+                    "после ручного git pull»)")
             else:
                 add(OK, "база в актуальном состоянии")
         except Exception as exc:
             add(WARN, f"база не отвечает ({type(exc).__name__}) — статус и отчёт "
                       "недоступны, остальное работает",
                 "проверьте, что служба PostgreSQL запущена и пароли в .env верны")
+
+    import shutil
+    add(OK if shutil.which("git") else INFO,
+        "git — для пункта «Обновить программу из GitHub»" if shutil.which("git")
+        else "git не найден — обновлять придётся вручную",
+        "" if shutil.which("git") else "по желанию: Git for Windows, git-scm.com")
 
     try:
         import anthropic                                   # noqa: F401

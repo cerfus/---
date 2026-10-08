@@ -84,6 +84,10 @@ def main():
           and not b.startswith(b"\xef\xbb\xbf"))
     check("C2 вызывает меню и переходит в папку проекта",
           "scripts\\menu.bat" in cmds and '%~dp0' in cmds)
+    call = [l for l in cmds.splitlines() if "scripts\\menu.bat" in l]
+    check("C2a после меню выход — на той же строке, что вызов "
+          "(файл может обновиться, пока меню открыто)",
+          len(call) == 1 and "exit /b" in call[0], str(call))
     check("C3 без скобочных блоков IF",
           not [l for l in cmds.splitlines() if l.rstrip().endswith("(")])
     req = (ROOT / "requirements.txt").read_text(encoding="utf-8")

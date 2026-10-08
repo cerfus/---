@@ -426,7 +426,7 @@ def run_all(real_make_client):
     check("G7 каждый пункт описан и пронумерован",
           [k for k, _, _ in __import__("importlib").import_module("runpy").run_path(
               str(ROOT / "scripts" / "menu.py"))["ITEMS"]]
-          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "0"])
+          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "0"])
 
     ok_yes = all(menu_ns["confirmed"](x) for x in ("да", "Да", "д", "y", "YES", " yes "))
     ok_no = not any(menu_ns["confirmed"](x) for x in ("нет", "", None, "n", "дда"))
@@ -446,8 +446,16 @@ def run_all(real_make_client):
     check("H3 нет BOM", not bat_b.startswith(b"\xef\xbb\xbf"))
     check("H4 вызывает scripts\\menu.py", "scripts\\menu.py" in cmds)
     check("H5 нет bash, wsl, python3", not any(w in cmds for w in ("bash", "wsl", "python3")))
-    check("H5a при ошибке окно не закрывается (pause)",
-          'if not "%rc%"=="0" pause' in cmds)
+    launch = [l for l in cmds.splitlines() if "scripts\\menu.py" in l]
+    # метка — строка, начинающаяся с «:»; «goto :menu_failed» в строке запуска — не она
+    failed_part = cmds.split("\n:menu_failed", 1)[1] if "\n:menu_failed" in cmds else ""
+    check("H5a при ошибке окно не закрывается (pause в ветке :menu_failed)",
+          "pause" in failed_part.split("exit /b", 1)[0])
+    check("H5b запуск меню и переход после него — одной строкой "
+          "(файл может обновиться, пока меню открыто)",
+          len(launch) == 1 and "goto :menu_ok" in launch[0]
+          and "goto :menu_failed" in launch[0]
+          and ":menu_ok" in cmds.replace("goto :menu_ok", ""), str(launch))
     check("H6 нет скобочных блоков IF",
           not [l for l in cmds.splitlines() if l.rstrip().endswith("(")])
 

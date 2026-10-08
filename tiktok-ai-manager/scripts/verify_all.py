@@ -391,6 +391,7 @@ TESTS = [
     ("11н",  "импорт выгрузок в raw/v1",                  "tests/test_import_export.py"),
     ("11о",  "готовность программы и обновление базы",    "tests/test_doctor_sync.py"),
     ("11п",  "план публикаций и календарь .ics",           "tests/test_plan.py"),
+    ("11р",  "обновление программы из GitHub",             "tests/test_update.py"),
 ]
 
 

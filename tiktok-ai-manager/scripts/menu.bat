@@ -32,9 +32,18 @@ pause
 exit /b 2
 
 :found
-%PY% scripts\menu.py %*
-set "RC=%errorlevel%"
+REM The launch and the jump after it MUST stay on one line. cmd.exe reads a
+REM .bat line by line from a byte offset; the menu can update this very file
+REM (git pull), and the next line would then be read from the middle of the
+REM new file. A line is parsed whole before it runs, and GOTO looks the label
+REM up in the current file, so this line is safe across updates.
+%PY% scripts\menu.py %* && goto :menu_ok || goto :menu_failed
+
+:menu_ok
+exit /b 0
+
+:menu_failed
 REM On an error keep the window open: a double-clicked window would
 REM otherwise close before the message could be read.
-if not "%RC%"=="0" pause
-exit /b %RC%
+pause
+exit /b 1
