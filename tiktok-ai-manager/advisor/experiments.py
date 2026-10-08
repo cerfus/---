@@ -35,6 +35,7 @@ Unix). Проверено на всех роликах аккаунта: рас�
 """
 import json
 import re
+import statistics
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -147,15 +148,25 @@ def register_idea(idea, analysis, path=REGISTER, now=None):
     hyps = {h["id"]: h for h in analysis["hypotheses"]}
     hyps.update({h["id"]: h for h in idea.get("_new_hypotheses", [])})
     statement = hyps[hid]["statement"] if hid in hyps else idea.get("data_basis")
+    h = hyps.get(hid) or {}
+    # условие гипотезы в машинном виде: по нему оценка делит ролики периода
+    # на «в условии» и контроль. Номера H меняются с данными, условие — нет
+    condition = ({"attribute": h["attribute"], "bounds": h["bounds"],
+                  "label": h.get("label"), "value": h.get("value")}
+                 if h.get("bounds") else None)
     if not statement:
         raise ValueError("у идеи нет проверяемой гипотезы")
     states = load(path)
     title = idea.get("title")
+    repeatable = _repeatable(idea)
     for st in states.values():
-        if title and any(i.get("title") == title for i in st.get("ideas", [])):
+        if not repeatable and title and any(i.get("title") == title
+                                            for i in st.get("ideas", [])):
             raise ValueError(f"идея «{title}» уже в работе: {st['code']}")
     card = {k: idea.get(k, "") for k in ("title", "what_to_film",
                                          "caption_draft", "when_to_post")}
+    if repeatable:
+        card["source"] = "template"
     # Та же гипотеза уже проверяется — идея присоединяется к открытому
     # эксперименту: база сравнения остаётся замороженной с его регистрации,
     # а ролики копятся до min_sample, а не расползаются по экспериментам.
@@ -172,6 +183,7 @@ def register_idea(idea, analysis, path=REGISTER, now=None):
         "event": "registered", "code": code, "at": now or _now(),
         "hypothesis_id": hid, "hypothesis": statement,
         "idea": card,
+        "condition": condition,
         "success_check": idea.get("success_check"),
         "min_sample": DEFAULT_MIN_SAMPLE, "maturity_days": MATURITY_DAYS,
         # база сравнения фиксируется В МОМЕНТ регистрации: потом её не
@@ -305,7 +317,33 @@ def _link_valid(st, vid, videos):
     return True, None
 
 
-def evaluate(st, analysis, videos=None):
+def control(st, analysis, videos, ctx=None):
+    """Контроль того же периода: зрелые ролики, вышедшие после регистрации,
+    не привязанные к эксперименту и ВНЕ условия гипотезы. Сравнение с ними
+    не зависит от того, просел или вырос аккаунт целиком — в отличие от
+    сравнения с медианой прошлых роликов. None — условие не записано
+    (ранние регистрации, гипотезы сессии без машинных границ)."""
+    cond = st["base"].get("condition")
+    if not cond:
+        return None
+    ctx = A.context() if ctx is None else ctx
+    reg = _as_utc(st["created_at"])
+    views = []
+    for vid, v in videos.items():
+        if vid in st["videos"] or not v.get("published_at") \
+                or _as_utc(v["published_at"]) < reg:
+            continue
+        obs = _observation(vid, analysis)
+        if obs is None or obs[1] < MATURITY_DAYS:
+            continue
+        if A.holds(cond, A.video_attrs(v, ctx)) is False:
+            views.append(obs[0])
+    return {"n": len(views),
+            "median": statistics.median(views) if views else None,
+            "label": f"{cond.get('label')}: не {cond.get('value')}"}
+
+
+def evaluate(st, analysis, videos=None, ctx=None):
     """Состояние эксперимента в цифрах. Ничего не пишет."""
     out = {"code": st["code"], "status": st["status"], "videos": [],
            "n_mature": 0, "n_above": 0, "min_sample": st.get("min_sample")}
@@ -364,6 +402,17 @@ def evaluate(st, analysis, videos=None):
     else:
         out["summary"] = (f"{out['n_above']} из {out['n_mature']} зрелых роликов выше "
                           f"медианы базы, n={out['n_mature']}")
+        mature_views = [r["views"] for r in out["videos"]
+                        if "views" in r and r["age_days"] >= MATURITY_DAYS]
+        ctl = control(st, analysis, videos, ctx)
+        out["control"] = ctl
+        if ctl is not None:
+            mine = statistics.median(mature_views)
+            out["summary"] += (
+                f" · медиана эксперимента {A._num(mine)} против контроля того же "
+                f"периода {A._num(ctl['median'])} (n={ctl['n']}, «{ctl['label']}»)"
+                if ctl["n"] else
+                " · контроля нет: роликов того же периода вне условия ещё нет")
     n_invalid = sum(1 for r in out["videos"] if r.get("invalid"))
     if n_invalid:
         out["summary"] += f" · недействительных привязок: {n_invalid}"
@@ -414,13 +463,22 @@ def taken_message(code, before, after):
             f"{st['created_at'][:10]}. " + tail)
 
 
+def _repeatable(idea):
+    """Шаблон («ролик в привычном формате, меняется один признак») можно
+    брать сколько угодно раз: так набирается выборка под гипотезу без
+    ключа API. Идея модели или сессии — одна, второй раз её не взять."""
+    return idea.get("source") == "template"
+
+
 def idea_states(states):
     """{название идеи: (код, "published" | "taken")}: вышла ли идея роликом
-    или только взята в работу."""
+    или только взята в работу. Шаблонов здесь нет — они повторяемы."""
     out = {}
     for st in states.values():
         done = {(st.get("links") or {}).get(v, {}).get("idea_title") for v in st["videos"]}
         for i in st.get("ideas") or []:
+            if _repeatable(i):
+                continue
             out[i.get("title")] = (st["code"], "published" if i.get("title") in done
                                    else "taken")
     return out

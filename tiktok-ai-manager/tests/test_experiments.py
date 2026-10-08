@@ -270,6 +270,83 @@ def main():
     c8 = E.register_idea(dict(IDEA, title="Третья"), analysis_stub(1000), tmp5)
     check("H7 к закрытому эксперименту не присоединяется — новый", c8 not in (c5, c7))
 
+    print("\n=== T. шаблоны повторяемы ===")
+    tmp6 = Path(tempfile.mkdtemp()) / "register.jsonl"
+    from advisor import ideas as I
+    a_real = A.analyze()
+    tpl = I.offline_ideas(a_real)[0]
+    t1 = E.register_idea(tpl, a_real, tmp6, now="2026-10-01T00:00:00+00:00")
+    t2 = E.register_idea(tpl, a_real, tmp6, now="2026-10-02T00:00:00+00:00")
+    st = E.load(tmp6)[t1]
+    check("T1 шаблон можно взять второй раз — в тот же эксперимент",
+          t1 == t2 and len(st["ideas"]) == 2
+          and all(i.get("source") == "template" for i in st["ideas"]))
+    vid = "6" + "0" * 17
+    E.link(t1, vid, tmp6, videos={vid: {"video_id": vid,
+                                        "published_at": "2026-10-03T00:00:00+00:00"}})
+    check("T2 вышедший шаблон не считается «вышедшей идеей» — его можно снимать снова",
+          tpl["title"] not in E.idea_states(E.load(tmp6)))
+    check("T3 идея сессии — по-прежнему одна (защита от дубля не ослаблена)",
+          not E._repeatable(IDEA) and E._repeatable(tpl))
+
+    print("\n=== V. контроль того же периода ===")
+    ctx = A.context()
+    rows, _ = A.load(A.ROOT, ctx)
+    vids_real = E._videos()
+    diff = [(r["video_id"], k) for r in rows
+            for k, v in A.video_attrs(vids_real[r["video_id"]], ctx).items()
+            if r.get(k) != v]
+    check("V1 признаки ролика для контроля — те же, что в разборе (все ролики)",
+          rows and not diff, f"роликов {len(rows)}, расхождений {len(diff)}")
+    tmp7 = Path(tempfile.mkdtemp()) / "register.jsonl"
+    h1_idea = dict(IDEA, title="Ночной", tests_hypothesis="H1")
+    a_real = A.analyze()
+    cx = E.register_idea(h1_idea, a_real, tmp7, now="2026-10-01T00:00:00+00:00")
+    cond = E.load(tmp7)[cx]["base"].get("condition") or {}
+    check("V2 при регистрации записано условие гипотезы в машинном виде",
+          cond.get("attribute") == "hour_utc" and cond.get("bounds", {}).get("kind") == "hour")
+
+    def vid(n):
+        return f"7{n:017d}"
+    vids, obs = {}, []
+
+    def add(n, when, views, age=40, linked=False):
+        vids[vid(n)] = {"video_id": vid(n), "published_at": when, "caption": ""}
+        obs.append({"video_id": vid(n), "views": views, "age_days": age,
+                    "observed_at": "2026-11-20T00:00:00+00:00", "verified_views": None,
+                    "verified_at": None, "url": "", "source": "metricool", "caption": ""})
+        if linked:
+            E.link(cx, vid(n), tmp7, videos=vids)
+    for i in range(5):                                  # в окне 19–23 UTC
+        add(i, f"2026-10-0{2 + i}T20:00:00+00:00", 2000 + 100 * i, linked=True)
+    add(10, "2026-10-03T12:00:00+00:00", 500)           # контроль
+    add(11, "2026-10-04T12:00:00+00:00", 700)           # контроль
+    add(12, "2026-10-05T12:00:00+00:00", 900)           # контроль
+    add(13, "2026-09-20T12:00:00+00:00", 99999)         # до регистрации — не в счёт
+    add(14, "2026-10-06T12:00:00+00:00", 88888, age=5)  # молодой — не в счёт
+    add(15, "2026-10-07T21:00:00+00:00", 77777)         # в окне, не привязан — не контроль
+    stub = analysis_stub(1000, unverified=obs)
+    ev = E.evaluate(E.load(tmp7)[cx], stub, videos=vids, ctx=ctx)
+    check("V3 контроль: только зрелые, после регистрации, вне условия",
+          ev["control"] == {"n": 3, "median": 700, "label": ev["control"]["label"]}
+          and "не 19–23" in ev["control"]["label"], str(ev.get("control")))
+    check("V4 в итоге — медиана эксперимента против контроля, с n",
+          "медиана эксперимента 2200 против контроля того же периода 700 (n=3" in ev["summary"],
+          ev["summary"])
+    check("V5 итог с контролем проходит валидатор формулировок",
+          not find_violations(ev["summary"], "RECOMMENDATION"))
+    only = {k: v for k, v in vids.items() if k in {vid(i) for i in range(5)}}
+    ev = E.evaluate(E.load(tmp7)[cx], analysis_stub(1000, unverified=obs[:5]),
+                    videos=only, ctx=ctx)
+    check("V6 нет роликов вне условия — так и сказано", "контроля нет" in ev["summary"])
+    tmp8 = Path(tempfile.mkdtemp()) / "register.jsonl"
+    cy = E.register_idea(IDEA, analysis_stub(1000), tmp8, now="2026-10-01T00:00:00+00:00")
+    for i in range(5):
+        E.link(cy, vid(i), tmp8, videos=vids)
+    ev = E.evaluate(E.load(tmp8)[cy], stub, videos=vids, ctx=ctx)
+    check("V7 условие не записано — контроль не выдумывается",
+          ev["control"] is None and "контрол" not in ev["summary"])
+
     print("\n=== G. какие идеи считаются последними ===")
     d = Path(tempfile.mkdtemp())
     (d / "20261001T000000_session.json").write_text(json.dumps(

@@ -287,6 +287,22 @@ def holds(hypothesis, attrs):
     return v == b["value"]
 
 
+def video_attrs(v, ctx):
+    """Все признаки ролика, по которым строятся гипотезы, — из его записи в
+    data/videos.jsonl, без просмотров. Те же формулы, что в load(); тест
+    сверяет их на всех роликах. Нужны оценке экспериментов: отнести ролик к
+    условию гипотезы или к контролю."""
+    caption = v.get("caption") or ""
+    words = len(_caption_words(caption))
+    out = {"duration_sec": v.get("duration_sec"),
+           "hashtags": len(re.findall(r"#\S+", caption)),
+           "caption_words": words,
+           "caption_kind": ("повествовательная" if words >= NARRATIVE_MIN_WORDS
+                            else "только хештеги")}
+    out.update(time_attrs(datetime.fromisoformat(v["published_at"]), ctx))
+    return out
+
+
 def time_attrs(when, ctx):
     """Признаки времени публикации — те же, что load() считает для роликов."""
     when = when.astimezone(timezone.utc)
