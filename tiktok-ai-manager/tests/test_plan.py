@@ -103,6 +103,18 @@ def main():
           and by["H3"]["at"].weekday() == 6 and not by["H3"]["mixed"],
           f"H2 {by['H2']['at']}, H3 {by['H3']['at']}")
 
+    morning = datetime(2026, 10, 9, 8, 0, tzinfo=timezone.utc)      # 11:00 по Москве
+    pm = [r for r in P.build(ideas, a, ctx=ctx, states={}, now=morning) if r["at"]]
+    tz = ctx["tz"] or timezone.utc
+    check("B10 без начала план стартует сегодня, если слот ещё впереди",
+          pm and pm[0]["at"].astimezone(tz).date() == morning.astimezone(tz).date(),
+          str(pm[0]["at"] if pm else None))
+    late = datetime(2026, 10, 9, 20, 30, tzinfo=timezone.utc)        # 23:30 по Москве
+    pl = [r for r in P.build(ideas, a, ctx=ctx, states={}, now=late) if r["at"]]
+    check("B11 слотов раньше «сейчас + 2 ч» нет",
+          pl and all(r["at"] >= late + timedelta(hours=P.LEAD_HOURS) for r in pl)
+          and all(r["at"] >= morning + timedelta(hours=P.LEAD_HOURS) for r in pm))
+
     print("\n=== C. честность, когда развести нельзя ===")
     a2 = copy.deepcopy(a)
     twin = dict(copy.deepcopy(hyps["H1"]), id="H9")

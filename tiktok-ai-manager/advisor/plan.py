@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT))
 from advisor import analysis as A, experiments as E   # noqa: E402
 
 HORIZON_DAYS = 21
+LEAD_HOURS = 2                  # запас на съёмку: слот раньше «сейчас + 2 ч» не предлагается
 TIME_ATTRS = {"hour_utc", "hour_local", "weekday", "weekday_local", "activity_pct"}
 ICS_PATH = ROOT / "data" / "runtime" / "plan.ics"
 EVENT_MINUTES = 30
@@ -58,7 +59,7 @@ def _tz(ctx):
     return ctx.get("tz") or timezone.utc
 
 
-def slot_for(idea_h, others, day, ctx):
+def slot_for(idea_h, others, day, ctx, not_before=None):
     """Лучший час дня для идеи: (datetime UTC, с какими гипотезами смешан)
     или None. idea_h — гипотеза идеи о времени (или None), others —
     остальные временные гипотезы."""
@@ -66,6 +67,8 @@ def slot_for(idea_h, others, day, ctx):
     best = None
     for h in range(24):
         local = datetime(day.year, day.month, day.day, h, tzinfo=tz)
+        if not_before is not None and local < not_before:
+            continue
         attrs = A.time_attrs(local, ctx)
         if idea_h is not None and A.holds(idea_h, attrs) is not True:
             continue
@@ -77,7 +80,7 @@ def slot_for(idea_h, others, day, ctx):
     return None if best is None else (best[1], best[2])
 
 
-def build(ideas, analysis, start=None, ctx=None, states=None):
+def build(ideas, analysis, start=None, ctx=None, states=None, now=None):
     """[{idea, n, hypothesis, at, mixed, stale, note}] — в порядке дат.
 
     Каждая идея берёт ближайший свободный день, где смешения с чужими
@@ -94,7 +97,14 @@ def build(ideas, analysis, start=None, ctx=None, states=None):
     hyps = {h["id"]: h for h in analysis["hypotheses"]}
     timed = [h for h in analysis["hypotheses"] if h.get("attribute") in TIME_ATTRS
              and h.get("bounds")]
-    first = start or (datetime.now(_tz(ctx)).date() + timedelta(days=1))
+    # без явного начала план начинается сегодня: сегодняшний вечерний слот
+    # полезнее завтрашнего, если до него хватает времени на съёмку
+    if start is None:
+        now = now or datetime.now(timezone.utc)
+        first = now.astimezone(_tz(ctx)).date()
+        not_before = now + timedelta(hours=LEAD_HOURS)
+    else:
+        first, not_before = start, None
     rows = []
     for n, idea in enumerate(ideas, 1):
         hid = idea.get("tests_hypothesis")
@@ -115,7 +125,7 @@ def build(ideas, analysis, start=None, ctx=None, states=None):
             day = first + timedelta(days=d)
             if day in taken:
                 continue
-            found = slot_for(row["_h"], others, day, ctx)
+            found = slot_for(row["_h"], others, day, ctx, not_before)
             if found and (best is None or len(found[1]) < len(best[1][1])):
                 best = (day, found)
                 if not found[1]:
@@ -178,7 +188,7 @@ def render(plan, analysis, ctx, source=None, states=None):
     return "\n".join(L)
 
 
-def today(ideas, analysis, ctx=None, states=None, start=None):
+def today(ideas, analysis, ctx=None, states=None, start=None, now=None):
     """Строки «что делать сейчас» для экрана запуска: ближайшая публикация
     по плану и эксперименты, у которых готов итог. Ничего не пишет."""
     ctx = A.context() if ctx is None else ctx
@@ -187,7 +197,8 @@ def today(ideas, analysis, ctx=None, states=None, start=None):
     if not ideas:
         L.append("Идей нет — пункт 4 «Идеи для следующих видео».")
     else:
-        rows = [r for r in build(ideas, analysis, start=start, ctx=ctx, states=states)
+        rows = [r for r in build(ideas, analysis, start=start, ctx=ctx, states=states,
+                                 now=now)
                 if r["at"]]
         if rows:
             r = rows[0]
