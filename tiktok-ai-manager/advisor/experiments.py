@@ -115,9 +115,29 @@ def next_code(states):
 
 # ─────────────────────────────── события ─────────────────────────────────────
 
+def stale_reason(idea, analysis):
+    """Почему идея устарела, или None. Устарела — если гипотеза, под которую
+    она написана, в текущем разборе звучит иначе или исчезла (номера H
+    зависят от данных). Идеи без снимка (ранние файлы) проверить нельзя —
+    они не считаются устаревшими."""
+    snap = idea.get("_snapshot") or {}
+    hid = idea.get("tests_hypothesis")
+    if hid not in snap:
+        return None
+    now = {h["id"]: h["statement"] for h in analysis["hypotheses"]}.get(hid)
+    if now == snap[hid]:
+        return None
+    return (f"гипотеза {hid} после новой выгрузки "
+            + ("исчезла из разбора" if now is None else "стала другой")
+            + " — сгенерируйте идеи заново (пункт 4)")
+
+
 def register_idea(idea, analysis, path=REGISTER, now=None):
     """Предрегистрация идеи. Возвращает код эксперимента."""
     hid = idea.get("tests_hypothesis")
+    stale = stale_reason(idea, analysis)
+    if stale:
+        raise ValueError(stale)
     hyps = {h["id"]: h for h in analysis["hypotheses"]}
     hyps.update({h["id"]: h for h in idea.get("_new_hypotheses", [])})
     statement = hyps[hid]["statement"] if hid in hyps else idea.get("data_basis")
@@ -363,10 +383,16 @@ def latest_ideas(ideas_dir=None):
     docs = [(f, json.loads(f.read_text(encoding="utf-8"))) for f in files]
     real = [(f, d) for f, d in docs if d.get("mode") != "template" and d.get("ideas")]
     path, data = (real or docs)[-1]
+    return path, _attach(data)
+
+
+def _attach(data):
+    """Идеи документа с контекстом, нужным регистрации и плану."""
     ideas = data.get("ideas", [])
     for i in ideas:
         i["_new_hypotheses"] = data.get("new_hypotheses", [])
-    return path, ideas
+        i["_snapshot"] = data.get("hypotheses")
+    return ideas
 
 
 def main(argv=None):
@@ -389,10 +415,7 @@ def main(argv=None):
     if args.cmd == "take":
         if args.file:
             path = Path(args.file)
-            data = json.loads(path.read_text(encoding="utf-8"))
-            ideas = data.get("ideas", [])
-            for i in ideas:
-                i["_new_hypotheses"] = data.get("new_hypotheses", [])
+            ideas = _attach(json.loads(path.read_text(encoding="utf-8")))
         else:
             path, ideas = latest_ideas()
         if not ideas:
@@ -401,7 +424,11 @@ def main(argv=None):
         if not 1 <= args.n <= len(ideas):
             print(f"идеи №{args.n} нет: в {path.name} их {len(ideas)}")
             return 1
-        code = register_idea(ideas[args.n - 1], a)
+        try:
+            code = register_idea(ideas[args.n - 1], a)
+        except ValueError as exc:
+            print(f"не зарегистрировано: {exc}")
+            return 1
         print(f"{code} зарегистрирован до публикации. После выхода ролика: "
               f"python -m advisor.experiments link {code} <ссылка>")
         return 0

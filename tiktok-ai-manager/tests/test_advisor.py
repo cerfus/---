@@ -414,7 +414,10 @@ def run_all(real_make_client):
     check("G3 неизвестный пункт назван", "нет пункта «42»" in out_)
     rc, out_ = menu("3\n\n0\n")
     check("G4 пункт 3 показывает разбор", "ЧТО ЗАЛЕТЕЛО" in out_ and "HYPOTHESIS" in out_)
-    rc, out_ = menu("11\nнет\n\n0\n")
+    import runpy
+    menu_ns = runpy.run_path(str(ROOT / "scripts" / "menu.py"))
+    key_of = {fn.__name__: k for k, _, fn in menu_ns["ITEMS"] if fn}
+    rc, out_ = menu(f"{key_of['migrate']}\nнет\n\n0\n")
     check("G5 миграции без «да» не запускаются",
           "отменено" in out_ and "Миграции" in out_)
     src = (ROOT / "scripts" / "menu.py").read_text(encoding="utf-8")
@@ -423,10 +426,8 @@ def run_all(real_make_client):
     check("G7 каждый пункт описан и пронумерован",
           [k for k, _, _ in __import__("importlib").import_module("runpy").run_path(
               str(ROOT / "scripts" / "menu.py"))["ITEMS"]]
-          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "0"])
+          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "0"])
 
-    import runpy
-    menu_ns = runpy.run_path(str(ROOT / "scripts" / "menu.py"))
     ok_yes = all(menu_ns["confirmed"](x) for x in ("да", "Да", "д", "y", "YES", " yes "))
     ok_no = not any(menu_ns["confirmed"](x) for x in ("нет", "", None, "n", "дда"))
     check("G8 согласие: да / д / y / yes — и ничего больше", ok_yes and ok_no)

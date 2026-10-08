@@ -386,6 +386,14 @@ def call_model(client, brief, sdk=None):
 
 # ──────────────────────────────── прогон ─────────────────────────────────────
 
+def snapshot(a):
+    """{H-номер: формулировка} на момент генерации. Номера гипотез зависят от
+    данных: после новой выгрузки H1 может стать другим признаком, и идея,
+    написанная под старый H1, проверяла бы не то. Снимок позволяет это
+    заметить (experiments.stale_reason)."""
+    return {h["id"]: h["statement"] for h in a["hypotheses"]}
+
+
 def from_payload(payload, a=None, source="session"):
     """Готовый ответ в схеме SCHEMA — через те же проверки, что ответ API.
 
@@ -401,6 +409,7 @@ def from_payload(payload, a=None, source="session"):
     return {"policy_version": IDEAS_POLICY_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "analysis_policy": a["policy_version"], "mode": source,
+            "hypotheses": snapshot(a),
             "model": "Claude, рабочая сессия" if source == "session" else source,
             "note": None if ideas else "ни одна идея не прошла проверку",
             "new_hypotheses": hyps, "ideas": ideas, "rejected": rejected}
@@ -413,6 +422,7 @@ def generate(a=None, client=None, offline=False, sdk=None):
     result = {"policy_version": IDEAS_POLICY_VERSION,
               "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
               "analysis_policy": a["policy_version"],
+              "hypotheses": snapshot(a),
               "mode": "template", "model": None, "note": None,
               "new_hypotheses": [], "ideas": [], "rejected": []}
     reason = "выбран режим без модели" if offline else None

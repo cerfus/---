@@ -85,7 +85,11 @@ def experiments(ask):
             if not n.isdigit() or not 1 <= int(n) <= len(ideas):
                 print("нет такой идеи")
                 continue
-            code = E.register_idea(ideas[int(n) - 1], a)
+            try:
+                code = E.register_idea(ideas[int(n) - 1], a)
+            except ValueError as exc:
+                print(f"не зарегистрировано: {exc}")
+                continue
             print(f"\n{code} зарегистрирован ДО публикации, база сравнения "
                   "зафиксирована. Снимите и выложите ролик, затем — пункт 3.")
         elif c == "3":
@@ -96,6 +100,10 @@ def experiments(ask):
                   if ok else f"не привязано: {why}")
         else:
             print(f"нет пункта «{c}»")
+
+
+def plan(ask):
+    _sub("-m", "advisor.plan")
 
 
 def dashboard(ask):
@@ -137,12 +145,13 @@ ITEMS = (
     ("3", "Что залетело и почему", analyze),
     ("4", "Идеи для следующих видео", ideas),
     ("5", "Эксперименты: взять идею, привязать ролик, итоги", experiments),
-    ("6", "Дашборд в браузере", dashboard),
-    ("7", "Загрузить видео из data\\assets\\incoming", ingest),
-    ("8", "Обновить базу после git pull", sync),
-    ("9", "Готовность программы", doctor),
-    ("10", "Полная проверка (verify_all)", verify),
-    ("11", "Миграции (--adopt)", migrate),
+    ("6", "План публикаций и календарь (.ics)", plan),
+    ("7", "Дашборд в браузере", dashboard),
+    ("8", "Загрузить видео из data\\assets\\incoming", ingest),
+    ("9", "Обновить базу после git pull", sync),
+    ("10", "Готовность программы", doctor),
+    ("11", "Полная проверка (verify_all)", verify),
+    ("12", "Миграции (--adopt)", migrate),
     ("0", "Выход", None),
 )
 

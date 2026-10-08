@@ -99,12 +99,15 @@ def main():
         os.environ.pop("TIKTOK_NO_BROWSER", None)
     check("D1 собирается в указанный путь", rc == 0 and out.exists() and out.stat().st_size > 5000)
     check("D2 при TIKTOK_NO_BROWSER браузер не открывается", not calls)
+    import runpy
+    key = next(k for k, _, fn in runpy.run_path(str(ROOT / "scripts" / "menu.py"))["ITEMS"]
+               if fn and fn.__name__ == "dashboard")
     p = subprocess.run([sys.executable, "scripts/menu.py"], cwd=str(ROOT),
-                       input="6\n\n0\n", capture_output=True, text=True,
+                       input=f"{key}\n\n0\n", capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=120,
                        env={**os.environ, "PYTHONIOENCODING": "utf-8",
                             "TIKTOK_NO_BROWSER": "1"})
-    check("D3 пункт 6 меню собирает дашборд", p.returncode == 0 and "дашборд:" in p.stdout)
+    check("D3 пункт меню «Дашборд» собирает дашборд", p.returncode == 0 and "дашборд:" in p.stdout)
 
     failed = [n for n, ok in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

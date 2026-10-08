@@ -86,6 +86,8 @@ echo; echo "=== 11н. импорт выгрузок в raw/v1 ==="; python3 test
 
 echo; echo "=== 11о. готовность программы и обновление базы ==="; python3 tests/test_doctor_sync.py | tail -2
 
+echo; echo "=== 11п. план публикаций и календарь .ics ==="; python3 tests/test_plan.py | tail -2
+
 echo; echo "=== 10. регрессия EXP-004 ==="; python3 tests/test_exp004_regression.py | tail -2
 echo; echo "=== 12. правило both_lagged (LAG-1..LAG-7) ==="; python3 tests/test_reconciliation.py | tail -2
 echo; echo "=== 13. воспроизводимость EXP-004 ==="; python3 experiments/EXP-004/exp004.py verify | tail -6

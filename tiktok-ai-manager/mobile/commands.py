@@ -85,8 +85,14 @@ def _next(_):
 
 
 def _plan(_):
-    from advisor import analysis as A, experiments as E
-    return E.render(E.load(), A.analyze())
+    # план считается на лету и не сохраняется: календарь .ics пишет только
+    # меню на ПК, телефон лишь показывает
+    from advisor import analysis as A, experiments as E, plan as P
+    a, ctx = A.analyze(), A.context()
+    path, ideas = E.latest_ideas()
+    return (P.render(P.build(ideas, a, ctx=ctx), a, ctx, path.name if path else None)
+            + "\n\nКалендарь .ics — на ПК: меню, пункт 6.\n\n"
+            + E.render(E.load(), a))
 
 
 def _refresh(_):
@@ -108,7 +114,7 @@ REGISTRY = {c.name: c for c in (
     Command("/queue", "publishing queue", _queue),
     Command("/hits", "what took off and why (verified data)", _hits),
     Command("/next", "latest saved ideas for next videos", _next),
-    Command("/plan", "experiments: registered bets and results", _plan),
+    Command("/plan", "publication plan and experiments (read-only)", _plan),
     Command("/refresh", "verify services (read-only)", _refresh),
     Command("/help", "commands", _help),
 )}

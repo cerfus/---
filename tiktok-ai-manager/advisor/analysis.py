@@ -32,7 +32,7 @@ import json
 import re
 import statistics
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -273,6 +273,33 @@ def in_window(h, start, length):
     return (h - start) % 24 <= length
 
 
+def holds(hypothesis, attrs):
+    """Выполняется ли признак гипотезы для набора признаков ролика или слота.
+    None — признака в наборе нет (или у гипотезы нет машинных границ)."""
+    b = hypothesis.get("bounds")
+    v = attrs.get(hypothesis.get("attribute"))
+    if not b or v is None:
+        return None
+    if b["kind"] == "hour":
+        return in_window(v, b["start"], b["length"])
+    if b["kind"] == "range":
+        return b["lo"] <= v <= b["hi"]
+    return v == b["value"]
+
+
+def time_attrs(when, ctx):
+    """Признаки времени публикации — те же, что load() считает для роликов."""
+    when = when.astimezone(timezone.utc)
+    out = {"weekday": WEEKDAYS[when.weekday()], "hour_utc": when.hour}
+    if ctx.get("tz") is not None:
+        loc = when.astimezone(ctx["tz"])
+        out.update(weekday_local=WEEKDAYS[loc.weekday()], hour_local=loc.hour)
+    if ctx.get("grid_tz") is not None and ctx.get("grid"):
+        g = when.astimezone(ctx["grid_tz"])
+        out["activity_pct"] = activity_pct(ctx["grid"], g.isoweekday(), g.hour)
+    return out
+
+
 def _cand_numeric(key, label, unit, hits, rest):
     hv = [r.get(key) for r in hits]
     if any(v is None for v in hv):
@@ -281,7 +308,7 @@ def _cand_numeric(key, label, unit, hits, rest):
     inside = [r for r in rest if r.get(key) is not None and lo <= r[key] <= hi]
     value = _num(lo) if lo == hi else f"{_num(lo)}–{_num(hi)}"
     return {"key": key, "label": label, "value": value + (f" {unit}" if unit else ""),
-            "n_same": len(inside)}
+            "n_same": len(inside), "bounds": {"kind": "range", "lo": lo, "hi": hi}}
 
 
 def _cand_hour(key, label, hits, rest):
@@ -292,7 +319,8 @@ def _cand_hour(key, label, hits, rest):
     inside = [r for r in rest if r.get(key) is not None and in_window(r[key], start, length)]
     value = (f"{start:02d} ч" if length == 0
              else f"{start:02d}–{(start + length) % 24:02d} ч")
-    return {"key": key, "label": label, "value": value, "n_same": len(inside)}
+    return {"key": key, "label": label, "value": value, "n_same": len(inside),
+            "bounds": {"kind": "hour", "start": start, "length": length}}
 
 
 def _cand_categorical(key, label, hits, rest):
@@ -302,7 +330,8 @@ def _cand_categorical(key, label, hits, rest):
     if len(set(vals)) != 1:
         return {"key": key, "label": label, "differs": sorted(set(vals))}
     return {"key": key, "label": label, "value": vals[0],
-            "n_same": sum(1 for r in rest if r.get(key) == vals[0])}
+            "n_same": sum(1 for r in rest if r.get(key) == vals[0]),
+            "bounds": {"kind": "eq", "value": vals[0]}}
 
 
 def analyze(rows=None, root=ROOT, fresh=None, ctx=None):
@@ -487,7 +516,10 @@ def _record(out, c, n_hits, n_rest, nm, counter, **extra):
             "competing_explanation": competing,
             "tz_robust": extra.get("tz_robust"),
             "tz_note": extra.get("tz_note"),
-            "local_view": extra.get("local_view")}))
+            "local_view": extra.get("local_view"),
+            # границы признака в машинном виде: по ним план публикаций
+            # подбирает слот, не разбирая текст value
+            "bounds": c.get("bounds")}))
     else:
         out["not_distinguishing"].append(_checked({
             "attribute": key, "claim_type": "FACT", "n_sample": nm,
