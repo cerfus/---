@@ -116,8 +116,22 @@ def brief_parts(a):
          "Факты:"]
     L += [f"- {f['id']}: {f['statement']}" for f in a["facts"]]
     L += ["", "Гипотезы разбора (проверяются публикациями):"]
-    L += ([f"- {h['id']}: {h['statement']}" for h in a["hypotheses"]]
-          or ["- нет"])
+    for h in a["hypotheses"]:
+        L.append(f"- {h['id']}: {h['statement']}")
+        if h.get("tz_robust") is True:
+            L.append(f"  держится и в другом поясе — {h['local_view']}")
+        elif h.get("tz_robust") is False:
+            L.append(f"  ВНИМАНИЕ: {h['tz_note']}")
+        if h["competing_explanation"] != A.COMPETING:
+            L.append(f"  оговорка: {h['competing_explanation'][len(A.COMPETING) + 1:]}")
+    if not a["hypotheses"]:
+        L.append("- нет")
+    ctx = a.get("context") or {}
+    if ctx.get("top_slots"):
+        start, stop = ctx.get("grid_period") or ("?", "?")
+        L += ["", f"Оценка Metricool (модель источника, не наблюдение; неделя {start}…{stop}, "
+                  f"{ctx.get('tz_name') or 'пояс запроса'}) — самые активные часы аудитории: "
+                  + ", ".join(f"{d} {h}:00 ({v})" for d, h, v in ctx["top_slots"]) + "."]
     L += ["", "Признаки, которые хиты НЕ отличают:"]
     L += ([f"- {x['statement']}" for x in a["not_distinguishing"]] or ["- нет"])
     L += ["", "Ролики (сверенные просмотры; молодые помечены):"]
@@ -128,6 +142,12 @@ def brief_parts(a):
                  f"{v['weekday']} {v['hour_utc']}:00 UTC | подпись: "
                  f"«{v['caption'][:300]}»")
     U = []
+    growth = [g for g in a.get("growth", []) if not g["new"]][:5]
+    if growth:
+        U += ["РОСТ ОТ ПОСЛЕДНЕГО СВЕРЕННОГО ЗНАЧЕНИЯ — не сверено:"]
+        U += [f"- video_id {g['video_id']} | +{g['delta']} за {g['days']} дн."
+              for g in growth]
+        U.append("")
     if a.get("unverified"):
         U = ["НЕ СВЕРЕНО — только один источник, второй недоступен. Это не факты: "
              f"упоминать только с пометкой «{UNVERIFIED_MARK}».", ""]
@@ -256,6 +276,21 @@ def validate(payload, a, brief):
 
 # ─────────────────────────────── без модели ──────────────────────────────────
 
+def _when(h):
+    """Когда публиковать по шаблону — в обоих поясах, если они известны."""
+    if h["attribute"] in ("hour_utc", "hour_local", "weekday", "weekday_local"):
+        text = f"{h['label']}: {h['value']}"
+        if h.get("local_view"):
+            text += f" (то же: {h['local_view']})"
+        if h.get("tz_robust") is False:
+            text += "; гипотеза зависит от пояса — проверять именно в нём"
+        return text
+    if h["attribute"] == "activity_pct":
+        return (f"в час, который Metricool оценивает в {h['value']} по активности "
+                "аудитории (тепловая карта — на дашборде)")
+    return "как обычно"
+
+
 def offline_ideas(a):
     """Эксперимент на каждую гипотезу разбора. Детерминированно."""
     ideas = []
@@ -267,8 +302,7 @@ def offline_ideas(a):
                             f"одно: «{h['label']}: {h['value']}»; остальное как "
                             "обычно — иначе публикация не проверит гипотезу.",
             "caption_draft": "",
-            "when_to_post": (f"{h['label']}: {h['value']}" if h["attribute"] in
-                             ("hour_utc", "weekday") else "как обычно"),
+            "when_to_post": _when(h),
             "tests_hypothesis": h["id"],
             "data_basis": h["statement"],
             "success_check": f"Через {A.MATURE_AGE_DAYS} дней сравнить просмотры "

@@ -49,6 +49,18 @@ def main():
     check("A6 несверенное вынесено отдельно и предупреждено",
           ("Свежее, не сверено" in page and "сверки нет" in page) == bool(a["unverified"]))
 
+    heat = page.split('<div class="heat">')[1].split("</div></div>")[0] if '<div class="heat">' in page else ""
+    check("A7 тепловая карта активности: 7 × 24 = 168 ячеек",
+          heat.count('class="c') == 168, str(heat.count('class="c')))
+    check("A8 на карте отмечены слоты хитов",
+          heat.count('class="c mark"') == a["n_hits"], str(heat.count('class="c mark"')))
+    check("A9 карта подписана как оценка источника, с таблицей",
+          "модель источника, не наблюдение" in page and "Таблица оценки" in page)
+    check("A10 зависимость гипотезы от пояса видна на карточке",
+          "зависит от часового пояса" in page)
+    check("A11 раздел роста помечен «не сверено»",
+          "Кто продолжает расти" in page and "не сверено" in page)
+
     print("\n=== B. безопасность и автономность ===")
     evil = dict(a, videos=[dict(a["videos"][0],
                                 caption='<script>alert(1)</script><img src=x onerror=alert(2)>')]

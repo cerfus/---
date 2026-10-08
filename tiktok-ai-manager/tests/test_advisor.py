@@ -96,9 +96,10 @@ def run_all(real_make_client):
     check("A9 у гипотез N, порог 25 и конкурирующее объяснение",
           all(h["n_sample"] == 10 and h["min_sample_required"] == 25
               and h["competing_explanation"] for h in a["hypotheses"]))
-    attrs = {h["attribute"] for h in a["hypotheses"]}
-    check("A10 гипотезы: час, слова подписи, день недели",
-          attrs == {"hour_utc", "caption_words", "weekday"}, str(sorted(attrs)))
+    ids = {h["id"]: h["attribute"] for h in a["hypotheses"]}
+    check("A10 номера гипотез стабильны: H1 час, H2 слова, H3 день, H4 активность",
+          ids == {"H1": "hour_utc", "H2": "caption_words", "H3": "weekday",
+                  "H4": "activity_pct"}, str(ids))
     nd = {x["attribute"] for x in a["not_distinguishing"]}
     check("A11 длительность, хештеги и вид подписи — «не отличает»",
           {"duration_sec", "hashtags", "caption_kind"} <= nd, str(sorted(nd)))
@@ -115,6 +116,54 @@ def run_all(real_make_client):
           str([u["video_id"] for u in newest]))
     check("A15 несверенное помечено в тексте разбора",
           "НЕ СВЕРЕНО" in A.render(a) if a["unverified"] else True)
+
+    H = {h["id"]: h for h in a["hypotheses"]}
+    check("A16 час публикации держится в поясе бренда: 22–02 Europe/Moscow",
+          H["H1"]["tz_robust"] is True and "22–02" in H["H1"]["local_view"],
+          str(H["H1"].get("local_view")))
+    check("A17 воскресенье — только в UTC: в Москве хиты в разные дни",
+          H["H3"]["tz_robust"] is False and "понедельник" in H["H3"]["tz_note"],
+          str(H["H3"].get("tz_note")))
+    check("A18 у гипотезы об активности названо допущение источника",
+          "модель Metricool" in H["H4"]["competing_explanation"])
+    hit_pct = sorted(v["activity_pct"] for v in a["videos"] if v["hit"])
+    check("A19 хиты вышли в тихие часы по оценке Metricool: 7-й и 35-й перцентиль",
+          hit_pct == [7, 35], str(hit_pct))
+    g = {x["video_id"]: x for x in a["growth"]}
+    fresh = {u["video_id"]: u for u in a["unverified"]}
+    check("A20 прирост = свежее − сверенное, новый ролик помечен новым",
+          all(x["new"] == (fresh[v]["verified_views"] is None) and
+              (x["new"] or x["delta"] == fresh[v]["views"] - fresh[v]["verified_views"])
+              for v, x in g.items()))
+    check("A21 текст разбора называет зависимость от пояса",
+          "зависит от часового пояса" in A.render(a))
+
+    print("\n=== A'. окно часов по кругу ===")
+    check("A22 [19, 23] → 19–23 (4 ч)", A.hour_window([19, 23]) == (19, 4))
+    check("A23 [2, 22] → 22–02 через полночь (4 ч), а не 2–22",
+          A.hour_window([22, 2]) == (22, 4), str(A.hour_window([22, 2])))
+    check("A24 один час — окно нулевой длины", A.hour_window([5]) == (5, 0))
+    check("A25 попадание в окно через полночь",
+          A.in_window(0, 22, 4) and A.in_window(2, 22, 4) and not A.in_window(3, 22, 4))
+
+    print("\n=== A''. без базы часовых поясов (как на голом Windows) ===")
+    import zoneinfo
+    saved_zi = zoneinfo.ZoneInfo
+    def no_tz(*_a, **_k):
+        raise zoneinfo.ZoneInfoNotFoundError("нет базы")
+    zoneinfo.ZoneInfo = no_tz
+    try:
+        ctx = A.context(ROOT)
+        rows, fr = A.load(ROOT, ctx)
+        a0 = A.analyze(rows, fresh=fr, ctx=ctx)
+    finally:
+        zoneinfo.ZoneInfo = saved_zi
+    check("A26 разбор не падает, причина названа с подсказкой tzdata",
+          ctx["tz"] is None and "tzdata" in (ctx["tz_note"] or ""))
+    check("A27 без пояса: гипотеза о дне не помечается, активность не считается",
+          all(h.get("tz_robust") is None for h in a0["hypotheses"])
+          and "activity_pct" not in {h["attribute"] for h in a0["hypotheses"]})
+    check("A28 причина видна в тексте разбора", "tzdata" in A.render(a0))
 
     print("\n=== B. разбор на подставных данных ===")
     b = A.analyze([row("y1", 999999, 3), row("y2", 5, 4)])
@@ -143,6 +192,17 @@ def run_all(real_make_client):
     check("B5 несверенный рекорд хитом не становится",
           "z" not in {v["video_id"] for v in b["videos"]} and b["unverified"][0]["video_id"] == "z")
 
+    # гипотеза держится только в местном поясе — заводится оттуда и помечается
+    tzrows = [dict(row(f"m{i}", 100, 60, "среда"), weekday_local="среда") for i in range(8)]
+    tzrows += [dict(row("h1", 5000, 60, "суббота"), weekday_local="воскресенье"),
+               dict(row("h2", 6000, 60, "воскресенье"), weekday_local="воскресенье")]
+    b = A.analyze(tzrows, ctx={"tz_name": "Europe/Moscow"})
+    wk = [h for h in b["hypotheses"] if h["attribute"].startswith("weekday")]
+    check("B6 только в местном поясе — гипотеза из местного, помечена «в UTC не отличает»",
+          len(wk) == 1 and wk[0]["attribute"] == "weekday_local"
+          and wk[0]["tz_robust"] is False and "в UTC не отличает" in wk[0]["tz_note"],
+          str([(h["attribute"], h.get("tz_note")) for h in wk]))
+
     print("\n=== C. идеи без модели ===")
     r = I.generate(a, offline=True)
     check("C1 режим — шаблоны", r["mode"] == "template" and r["model"] is None)
@@ -158,6 +218,10 @@ def run_all(real_make_client):
           all(i["claim_type"] == "RECOMMENDATION" for i in r["ideas"]))
     check("C5 внутренние имена полей пользователю не показываются",
           not any("hour_utc" in i["what_to_film"] for i in r["ideas"]))
+    when = {i["tests_hypothesis"]: i["when_to_post"] for i in r["ideas"]}
+    check("C6 время публикации дано в обоих поясах", "22–02" in when.get("H1", ""))
+    check("C7 зависимая от пояса гипотеза предупреждает в самой идее",
+          "зависит от пояса" in when.get("H3", ""))
 
     print("\n=== D. идеи от модели (подменный клиент) ===")
     brief = I.build_brief(a)

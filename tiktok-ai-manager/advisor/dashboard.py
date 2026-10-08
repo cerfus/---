@@ -48,16 +48,19 @@ CSS = """
  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;--muted:#898781;
  --grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);
  --accent:#2a78d6;--accent-track:#cde2fb;--rest:#898781;
- --warn-bg:#fff6e0;--warn-ink:#6b4a00}
+ --warn-bg:#fff6e0;--warn-ink:#6b4a00;
+ --q1:#cde2fb;--q2:#9ec5f4;--q3:#6da7ec;--q4:#3987e5;--q5:#256abf;--q6:#184f95;--q7:#0d366b}
 @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{
  color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink-2:#c3c2b7;
  --muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
  --accent:#3987e5;--accent-track:#184f95;--rest:#898781;
- --warn-bg:#2e2510;--warn-ink:#f2cf7a}}
+ --warn-bg:#2e2510;--warn-ink:#f2cf7a;
+ --q1:#0d366b;--q2:#184f95;--q3:#256abf;--q4:#2a78d6;--q5:#5598e7;--q6:#86b6ef;--q7:#b7d3f6}}
 :root[data-theme="dark"] .viz-root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;
  --ink:#fff;--ink-2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;
  --ring:rgba(255,255,255,.10);--accent:#3987e5;--accent-track:#184f95;
- --rest:#898781;--warn-bg:#2e2510;--warn-ink:#f2cf7a}
+ --rest:#898781;--warn-bg:#2e2510;--warn-ink:#f2cf7a;
+ --q1:#0d366b;--q2:#184f95;--q3:#256abf;--q4:#2a78d6;--q5:#5598e7;--q6:#86b6ef;--q7:#b7d3f6}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page)}
 .viz-root{font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);
@@ -104,6 +107,18 @@ details summary{cursor:pointer;color:var(--ink-2);margin-top:10px}
  box-shadow:0 4px 16px rgba(0,0,0,.12);display:none;z-index:9}
 #tip b{display:block;font-size:15px}
 #tip span{display:block;color:var(--ink-2)}
+.heat{display:grid;grid-template-columns:34px repeat(24,minmax(22px,1fr));gap:2px;
+ min-width:620px;font-size:11px;color:var(--muted)}
+.heat .c{position:relative;height:24px;border-radius:3px;outline:none}
+.heat .c.mark::after{content:"";position:absolute;left:50%;top:50%;width:10px;height:10px;
+ margin:-7px 0 0 -7px;border-radius:50%;background:var(--surface);border:2px solid var(--ink)}
+.heat .h{text-align:center} .heat .d{line-height:24px}
+.ramp{display:inline-flex;gap:2px;vertical-align:middle;margin:0 6px}
+.ramp i{width:16px;height:10px;border-radius:2px;display:inline-block}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--ink);
+ background:var(--surface);vertical-align:-2px;margin-right:6px}
+.tz-ok{color:var(--ink-2)} .tz-warn{color:var(--warn-ink);background:var(--warn-bg);
+ border-radius:6px;padding:2px 6px;display:inline-block;margin-top:6px}
 @media (max-width:560px){.row{grid-template-columns:118px 1fr 64px}.row .name{font-size:12px}.kpi .value{font-size:24px}.meter{grid-template-columns:96px 1fr 44px}}
 """
 
@@ -112,7 +127,7 @@ JS = """
  var tip=document.getElementById('tip');
  function show(el,x,y){
   tip.replaceChildren();
-  var b=document.createElement('b');b.textContent=el.dataset.views+' просмотров';tip.appendChild(b);
+  var b=document.createElement('b');b.textContent=el.dataset.head||(el.dataset.views+' просмотров');tip.appendChild(b);
   ['meta','cap'].forEach(function(k){if(el.dataset[k]){var s=document.createElement('span');
    s.textContent=el.dataset[k];tip.appendChild(s);}});
   tip.style.display='block';
@@ -120,7 +135,7 @@ JS = """
   tip.style.left=Math.min(x+14,innerWidth-r.width-8)+'px';
   tip.style.top=Math.min(y+14,innerHeight-r.height-8)+'px';
  }
- document.querySelectorAll('.row').forEach(function(el){
+ document.querySelectorAll('.row,.heat .c').forEach(function(el){
   el.addEventListener('mousemove',function(e){show(el,e.clientX,e.clientY)});
   el.addEventListener('mouseleave',function(){tip.style.display='none'});
   el.addEventListener('focus',function(){var r=el.getBoundingClientRect();show(el,r.left+160,r.bottom)});
@@ -157,6 +172,51 @@ def bars(videos, title, note):
             f'<div class="bars">{"".join(rows)}</div></div>')
 
 
+DAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+
+
+def heatmap(a):
+    """Активность аудитории по оценке Metricool и где вышли хиты.
+
+    Форма — тепловая карта (сетка «день × час», один оттенок: больше —
+    темнее в светлой теме). Кружки — слоты публикации хитов, переведённые
+    в пояс оценки. Это оценка источника, а не наблюдение просмотров.
+    """
+    ctx = a.get("context") or {}
+    grid = ctx.get("grid") or []
+    if not grid:
+        return ""
+    hits = {}
+    for v in a["videos"]:
+        if v.get("hit") and v.get("grid_slot"):
+            hits.setdefault(tuple(v["grid_slot"]), []).append(v)
+    cells = ['<div></div>'] + [f'<div class="h">{h:02d}</div>' for h in range(24)]
+    for d in range(1, 8):
+        cells.append(f'<div class="d">{DAYS_SHORT[d - 1]}</div>')
+        for dd, h, val, pct in (c for c in grid if c[0] == d):
+            q = min(7, 1 + pct * 7 // 101)
+            hv = hits.get((dd, h), [])
+            mark = " mark" if hv else ""
+            extra = (" · хит: " + ", ".join(fmt(x["views"]) + " просм." for x in hv)) if hv else ""
+            cells.append(
+                f'<div class="c{mark}" tabindex="0" style="background:var(--q{q})" '
+                f'data-head="{esc(DAYS_SHORT[d - 1])} {h:02d}:00" '
+                f'data-meta="{esc(f"оценка {val} · {pct}-й перцентиль{extra}")}"></div>')
+    start, stop = ctx.get("grid_period") or ("?", "?")
+    ramp = "".join(f'<i style="background:var(--q{i})"></i>' for i in range(1, 8))
+    rows = "".join(f"<tr><td>{DAYS_SHORT[d - 1]} {h:02d}:00</td><td class='n'>{val}</td>"
+                   f"<td class='n'>{pct}</td></tr>" for d, h, val, pct in grid)
+    return (f'<h2>Когда активна аудитория</h2><p class="note">Оценка Metricool — модель '
+            f'источника, не наблюдение: неделя {esc(start)}…{esc(stop)}, пояс '
+            f'{esc(ctx.get("grid_tz_name") or "?")}. Ролики вышли раньше этой недели.</p>'
+            f'<div class="card"><div class="legend">меньше<span class="ramp">{ramp}</span>больше'
+            f'<span><span class="dot"></span>здесь вышел хит</span></div>'
+            f'<div class="scroll"><div class="heat">{"".join(cells)}</div></div>'
+            f'<details><summary>Таблица оценки</summary><div class="scroll"><table><thead><tr>'
+            f'<th>Слот</th><th>Оценка</th><th>Перцентиль</th></tr></thead><tbody>{rows}'
+            f'</tbody></table></div></details></div>')
+
+
 def meters(h):
     hits, rest, total = h["hits_matching"], h["rest_matching"], h["rest_total"]
     def m(label, k, n):
@@ -165,6 +225,32 @@ def meters(h):
                 f'<div class="f" style="width:{pct:.0f}%"></div></div>'
                 f'<span>{k} из {n}</span></div>')
     return m("хиты", hits, hits) + m("остальные зрелые", rest, total)
+
+
+def tz_badge(h):
+    if h.get("tz_robust") is True:
+        return f'<p class="tz-ok note">держится и в другом поясе — {esc(h["local_view"])}</p>'
+    if h.get("tz_robust") is False:
+        return f'<p class="tz-warn">⚠ {esc(h["tz_note"])}</p>'
+    return ""
+
+
+def growth(a):
+    g = [x for x in a.get("growth", [])][:8]
+    if not g:
+        return ""
+    rows = []
+    for x in g:
+        if x["new"]:
+            what = f"новый: {fmt(x['views'])} за {x['age_days']} дн."
+        else:
+            what = f"+{fmt(x['delta'])} за {x['days']} дн. ({A._num(x['per_day'])}/дн.)"
+        rows.append(f'<tr><td>…{esc(x["video_id"][-6:])} <span class="note">'
+                    f'{esc((x["caption"] or "")[:50])}</span></td><td class="n">{esc(what)}</td></tr>')
+    return ('<h2>Кто продолжает расти</h2><p class="note">От последнего сверенного значения к '
+            'свежему. Один источник — не сверено.</p><div class="card scroll"><table><thead><tr>'
+            '<th>Ролик</th><th>Прирост</th></tr></thead><tbody>' + "".join(rows)
+            + '</tbody></table></div>')
 
 
 def build(a=None, states=None, ideas_file=None, ideas=None):
@@ -219,8 +305,9 @@ def build(a=None, states=None, ideas_file=None, ideas=None):
         P.append("<div class=\"hyps\">" + "".join(
             f'<div class="card"><span class="tag">HYPOTHESIS · {esc(h["id"])} · n={h["n_sample"]}'
             f'</span><p style="margin:8px 0 0"><b>{esc(h["label"])}: {esc(h["value"])}</b></p>'
-            f'{meters(h)}<p class="note" style="margin-top:10px">Причинность не установлена. '
-            f'{esc(h["competing_explanation"])}</p></div>' for h in a["hypotheses"]) + "</div>")
+            f'{meters(h)}{tz_badge(h)}<p class="note" style="margin-top:10px">Причинность не '
+            f'установлена. {esc(h["competing_explanation"])}</p></div>'
+            for h in a["hypotheses"]) + "</div>")
     else:
         P.append("<p>Ни один признак не отделяет хиты от остальных.</p>")
     if a["not_distinguishing"]:
@@ -228,6 +315,8 @@ def build(a=None, states=None, ideas_file=None, ideas=None):
                  + "".join(f"<li>{esc(x['statement'])}</li>" for x in a["not_distinguishing"])
                  + "</ul>")
 
+    P.append(heatmap(a))
+    P.append(growth(a))
     if a["unverified"]:
         P.append("<h2>Свежее, не сверено</h2><p class=\"note\">Один источник, второй "
                  "недоступен. FACT на этих числах не строится.</p><div class=\"card scroll\">"
