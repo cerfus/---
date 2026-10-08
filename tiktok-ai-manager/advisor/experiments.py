@@ -18,6 +18,14 @@ experiments/register.jsonl — append-only. Прежние записи (EXP-001
 регистрации, к эксперименту не привязывается: гипотезу «проверяли» бы
 роликом, результат которого уже был известен. Это подгонка, а не опыт.
 
+Ролик можно привязать сразу после публикации, не дожидаясь выгрузки:
+в ID ролика TikTok зашито время его создания (старшие 32 бита — секунды
+Unix). Проверено на всех роликах аккаунта: расхождение с published_at
+выгрузки — от 3 до 44 секунд (тест P6 держит это на данных). По этой
+дате порядок проверяется сразу, а когда ролик придёт в выгрузке — ещё
+раз, по published_at. Нарушение порядка делает привязку недействительной:
+ролик не входит в итог, и это видно в списке.
+
 Итог по одному ролику — наблюдение, а не вывод. Сравнение с базой
 выдаётся только после MATURITY_DAYS, и пока роликов меньше min_sample,
 эксперимент остаётся открытым.
@@ -88,6 +96,7 @@ def load(path=REGISTER):
         st["events"].append(r)
         if r["event"] == "linked":
             st["videos"].append(r["video_id"])
+            st.setdefault("links", {})[r["video_id"]] = r
             if st["status"] in ("proposed", "preregistered"):
                 st["status"] = "running"
         elif r["event"] == "concluded":
@@ -142,6 +151,27 @@ def _videos(root=ROOT):
     return {v["video_id"]: v for v in _read(Path(root) / "data" / "videos.jsonl")}
 
 
+ID_EPOCH_MIN = datetime(2016, 9, 1, tzinfo=timezone.utc)   # запуск TikTok
+ID_FUTURE_SLACK_SEC = 86400
+
+
+def id_time(vid, now=None):
+    """Время создания ролика из его ID (UTC) или None, если дата неправдоподобна.
+
+    Неправдоподобна — раньше запуска TikTok или позже, чем «сейчас» плюс
+    сутки: такой номер не ID ролика, а опечатка или чужое число.
+    """
+    try:
+        t = datetime.fromtimestamp(int(vid) >> 32, timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        return None
+    now = datetime.fromisoformat(now) if isinstance(now, str) else (
+        now or datetime.now(timezone.utc))
+    if t < ID_EPOCH_MIN or (t - now).total_seconds() > ID_FUTURE_SLACK_SEC:
+        return None
+    return t.isoformat()
+
+
 def link(code, video, path=REGISTER, now=None, videos=None):
     """(True, None) либо (False, причина)."""
     states = load(path)
@@ -157,17 +187,28 @@ def link(code, video, path=REGISTER, now=None, videos=None):
         return False, f"ролик {vid} уже привязан к {code}"
     videos = _videos() if videos is None else videos
     v = videos.get(vid)
-    if v is None:
-        return False, (f"ролика {vid} нет в данных — сначала новая выгрузка "
-                       "(ролик появится в data/videos.jsonl)")
     reg_at = st["created_at"]
-    if v["published_at"] < _as_utc(reg_at):
-        return False, (f"ролик опубликован {v['published_at'][:16]}, раньше регистрации "
+    record = {"event": "linked", "code": code, "at": now or _now(), "video_id": vid}
+    if v is not None:
+        when, source = v["published_at"], "выгрузка"
+        record["published_at"] = when
+    else:
+        # ролика ещё нет в выгрузке: дата — из его ID, порядок проверим
+        # повторно, когда он придёт (evaluate)
+        when = id_time(vid, now=now)
+        if when is None:
+            return False, (f"ролика {vid} нет в данных, и по номеру не видно даты "
+                           "публикации — проверьте ссылку или дождитесь, пока "
+                           "выгрузка его покажет")
+        source = "ID ролика"
+        record.update(published_at=None, id_time=when, pending=True)
+    if _as_utc(when) < _as_utc(reg_at):
+        return False, (f"ролик опубликован {when[:16]} ({source}), раньше регистрации "
                        f"{code} ({reg_at[:16]}): результат был известен до "
                        "эксперимента, такая проверка — подгонка")
-    _append(path, {"event": "linked", "code": code, "at": now or _now(),
-                   "video_id": vid, "published_at": v["published_at"]})
-    return True, None
+    _append(path, record)
+    return True, ("ролика пока нет в выгрузке — привязан по дате из ID, порядок "
+                  "перепроверится, когда он появится" if v is None else None)
 
 
 def _as_utc(stamp):
@@ -203,7 +244,20 @@ def _observation(vid, analysis):
     return None
 
 
-def evaluate(st, analysis):
+def _link_valid(st, vid, videos):
+    """(действительна ли привязка, пояснение). Порядок «регистрация →
+    публикация» проверяется по самой точной дате, какая есть сейчас:
+    published_at выгрузки, если ролик в ней уже есть, иначе — дата из ID."""
+    rec = (st.get("links") or {}).get(vid, {})
+    v = videos.get(vid)
+    when = (v or {}).get("published_at") or rec.get("published_at") or rec.get("id_time")
+    if when and _as_utc(when) < _as_utc(st["created_at"]):
+        return False, (f"привязка недействительна: ролик опубликован {when[:16]}, "
+                       f"раньше регистрации ({st['created_at'][:16]}) — в итог не входит")
+    return True, None
+
+
+def evaluate(st, analysis, videos=None):
     """Состояние эксперимента в цифрах. Ничего не пишет."""
     out = {"code": st["code"], "status": st["status"], "videos": [],
            "n_mature": 0, "n_above": 0, "min_sample": st.get("min_sample")}
@@ -221,7 +275,12 @@ def evaluate(st, analysis):
         return out
     base = (st["base"].get("baseline") or {}).get("median_views_mature")
     out["baseline"] = base
+    videos = _videos() if videos is None else videos
     for vid in st["videos"]:
+        valid, why = _link_valid(st, vid, videos)
+        if not valid:
+            out["videos"].append({"video_id": vid, "state": why, "invalid": True})
+            continue
         obs = _observation(vid, analysis)
         if obs is None:
             out["videos"].append({"video_id": vid, "state": "нет наблюдений — нужна новая выгрузка"})
@@ -257,16 +316,19 @@ def evaluate(st, analysis):
     else:
         out["summary"] = (f"{out['n_above']} из {out['n_mature']} зрелых роликов выше "
                           f"медианы базы, n={out['n_mature']}")
+    n_invalid = sum(1 for r in out["videos"] if r.get("invalid"))
+    if n_invalid:
+        out["summary"] += f" · недействительных привязок: {n_invalid}"
     return out
 
 
-def render(states, analysis):
+def render(states, analysis, videos=None):
     L = ["ЭКСПЕРИМЕНТЫ", ""]
     if not states:
         return "ЭКСПЕРИМЕНТЫ\n\nжурнал пуст"
     for code in sorted(states, key=lambda c: (c is None, c)):
         st = states[code]
-        ev = evaluate(st, analysis)
+        ev = evaluate(st, analysis, videos)
         L.append(f"{code}  [{st['status']}]  {(st.get('hypothesis') or '')[:110]}")
         if st["status"] == "blocked":
             valid = ev.get("block_still_valid")
@@ -344,7 +406,8 @@ def main(argv=None):
               f"python -m advisor.experiments link {code} <ссылка>")
         return 0
     ok, why = link(args.code, args.video)
-    print(f"привязано к {args.code}" if ok else f"не привязано: {why}")
+    print((f"привязано к {args.code}" + (f" — {why}" if why else ""))
+          if ok else f"не привязано: {why}")
     return 0 if ok else 1
 
 

@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -174,6 +175,61 @@ def main():
                        encoding="utf-8", errors="replace", timeout=120,
                        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     check("F1 пункт 5 → 1 показывает журнал", "EXP-003" in p.stdout and p.returncode == 0)
+
+    print("\n=== P. привязка до прихода выгрузки ===")
+    real_v = E._videos()
+    gaps = [(datetime.fromisoformat(v["published_at"]) -
+             datetime.fromisoformat(E.id_time(vid))).total_seconds()
+            for vid, v in real_v.items()]
+    check("P6 FACT: дата из ID совпадает с published_at выгрузки (0…60 с) у всех роликов",
+          len(gaps) == len(real_v) >= 17 and all(0 <= g <= 60 for g in gaps),
+          f"n={len(gaps)}, разброс {min(gaps):.0f}…{max(gaps):.0f} с")
+
+    def make_id(stamp, tail=12345):
+        return str((int(datetime.fromisoformat(stamp).timestamp()) << 32) | tail)
+
+    tmp4 = Path(tempfile.mkdtemp()) / "register.jsonl"
+    c4 = E.register_idea(IDEA, analysis_stub(1000), tmp4, now="2026-10-01T00:00:00+00:00")
+    fresh = make_id("2026-10-02T18:00:00+00:00")
+    ok, why = E.link(c4, f"https://www.tiktok.com/@gulyashik52/video/{fresh}", tmp4,
+                     now="2026-10-02T18:05:00+00:00", videos={})
+    rec = E._read(tmp4)[-1]
+    check("P1 ролика нет в выгрузке, дата из ID после регистрации — привязан как ожидающий",
+          ok and rec.get("pending") is True and rec["published_at"] is None
+          and rec["id_time"].startswith("2026-10-02T18:00") and "выгрузк" in why, str(why))
+    old_id = make_id("2026-09-25T12:00:00+00:00")
+    ok, why = E.link(c4, old_id, tmp4, now="2026-10-02T18:05:00+00:00", videos={})
+    check("P2 дата из ID раньше регистрации — отказ сразу: подгонка",
+          not ok and "подгонка" in why and "ID ролика" in why, str(why))
+    future = make_id("2026-12-01T00:00:00+00:00")
+    ok, why = E.link(c4, future, tmp4, now="2026-10-02T18:05:00+00:00", videos={})
+    check("P3 дата из ID в будущем — это не ID ролика, отказ", not ok, str(why))
+
+    ev = E.evaluate(E.load(tmp4)[c4], analysis_stub(1000), videos={})
+    row = next(r for r in ev["videos"] if r["video_id"] == fresh)
+    check("P5 пока ролика нет в выгрузке — просьба о выгрузке, в итог не входит",
+          "нужна новая выгрузка" in row["state"] and ev["n_mature"] == 0, row["state"])
+
+    # выгрузка пришла — и показала, что ролик вышел ДО регистрации
+    # (ID обманул, перезалив, ошибка ввода — неважно): привязка снимается с учёта
+    came = {fresh: {"video_id": fresh, "published_at": "2026-09-30T23:00:00+00:00"}}
+    obs = [{"video_id": fresh, "views": 99999, "age_days": 40,
+            "observed_at": "2026-11-10T00:00:00+00:00", "verified_views": None,
+            "verified_at": None, "url": "", "source": "metricool", "caption": ""}]
+    ev = E.evaluate(E.load(tmp4)[c4], analysis_stub(1000, unverified=obs), videos=came)
+    row = next(r for r in ev["videos"] if r["video_id"] == fresh)
+    check("P4 выгрузка показала публикацию до регистрации — привязка недействительна, "
+          "в счёт не идёт",
+          row.get("invalid") and "недействительна" in row["state"]
+          and ev["n_mature"] == 0 and ev["n_above"] == 0, row["state"])
+    check("P4a недействительная привязка видна в итоге и в списке",
+          "недействительных привязок: 1" in ev["summary"]
+          and "недействительна" in E.render(E.load(tmp4), analysis_stub(1000, unverified=obs),
+                                            videos=came), ev["summary"])
+    came_ok = {fresh: {"video_id": fresh, "published_at": "2026-10-02T18:00:20+00:00"}}
+    ev = E.evaluate(E.load(tmp4)[c4], analysis_stub(1000, unverified=obs), videos=came_ok)
+    check("P4b выгрузка подтвердила порядок — ролик идёт в счёт",
+          ev["n_mature"] == 1 and ev["n_above"] == 1, ev["summary"])
 
     print("\n=== G. какие идеи считаются последними ===")
     d = Path(tempfile.mkdtemp())

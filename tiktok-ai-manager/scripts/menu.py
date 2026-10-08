@@ -92,7 +92,8 @@ def experiments(ask):
             code = (ask("  код эксперимента (EXP-…) > ") or "").strip().upper()
             video = ask("  ссылка на ролик или video_id > ") or ""
             ok, why = E.link(code, video)
-            print(f"привязано к {code}" if ok else f"не привязано: {why}")
+            print((f"привязано к {code}" + (f" — {why}" if why else ""))
+                  if ok else f"не привязано: {why}")
         else:
             print(f"нет пункта «{c}»")
 
