@@ -304,6 +304,23 @@ TikHub) исключены решением владельца. Бинарник
    ветку свой журнал экспериментов и идеи (меню, пункт 10). Владельцу —
    пункт 9 меню «Обновить программу из GitHub» (`scripts/update.py`).
 
+## Идеи из сессии (процедура)
+
+Ключа API у владельца нет, поэтому настоящие идеи (не шаблоны) пишет
+сессия Claude — через те же проверки, что ответ модели.
+
+1. Бриф: `python3 -c "from advisor import ideas as I, analysis as A; print(I.build_brief(A.analyze()))"`,
+   правила — `I.system_prompt()`. Что нужно плану:
+   `python3 -m advisor.plan --no-ics` (устаревшие идеи, «новые идеи под H…»).
+2. Ответ — JSON по `advisor/ideas.py` `SCHEMA`: `ideas` (title, what_to_film,
+   caption_draft, when_to_post, tests_hypothesis, data_basis, success_check)
+   и `new_hypotheses` (id `L<n>`, statement, evidence_video_ids,
+   competing_explanation). Предпочтение — гипотезам открытых экспериментов,
+   которым не хватает роликов; `when_to_post` — внутри окна своей гипотезы.
+3. `python3 -m advisor.run ideas --payload ФАЙЛ`. Отброшенное показывается с
+   причиной; исправляется текст идеи, а не проверка.
+4. Коммит `data/ideas/*` отдельным коммитом «Идеи: …».
+
 Журнал `experiments/register.jsonl` сливается по `merge=union`
 (`.gitattributes` проекта): обе стороны только дописывают строки.
 Эксперименты регистрирует только владелец — меню на ПК; сессия их не
