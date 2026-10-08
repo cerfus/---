@@ -426,7 +426,7 @@ def run_all(real_make_client):
     check("G7 каждый пункт описан и пронумерован",
           [k for k, _, _ in __import__("importlib").import_module("runpy").run_path(
               str(ROOT / "scripts" / "menu.py"))["ITEMS"]]
-          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "0"])
+          == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "0"])
 
     ok_yes = all(menu_ns["confirmed"](x) for x in ("да", "Да", "д", "y", "YES", " yes "))
     ok_no = not any(menu_ns["confirmed"](x) for x in ("нет", "", None, "n", "дда"))

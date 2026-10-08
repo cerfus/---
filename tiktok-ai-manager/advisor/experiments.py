@@ -326,10 +326,16 @@ def control(st, analysis, videos, ctx=None):
     """Контроль того же периода: зрелые ролики, вышедшие после регистрации,
     не привязанные к эксперименту и ВНЕ условия гипотезы. Сравнение с ними
     не зависит от того, просел или вырос аккаунт целиком — в отличие от
-    сравнения с медианой прошлых роликов. None — условие не записано
-    (ранние регистрации, гипотезы сессии без машинных границ)."""
+    сравнения с медианой прошлых роликов.
+
+    У гипотезы без машинных границ (L… из идей сессии: «подпись-справка о
+    персонаже», «просьба о репосте») условие проверить кодом нельзя. Тогда
+    контроль — ролики того же периода вне этого эксперимента, и подпись
+    говорит об этом прямо: среди них могут быть ролики с тем же признаком.
+    Без такого контроля итог по правилу для них был бы «неясно» навсегда.
+    None — у эксперимента нет правила итога (ранние записи журнала)."""
     cond = st["base"].get("condition")
-    if not cond:
+    if not cond and st["base"].get("decision_rule") != DECISION_RULE:
         return None
     ctx = A.context() if ctx is None else ctx
     reg = _as_utc(st["created_at"])
@@ -341,11 +347,13 @@ def control(st, analysis, videos, ctx=None):
         obs = _observation(vid, analysis)
         if obs is None or obs[1] < MATURITY_DAYS:
             continue
-        if A.holds(cond, A.video_attrs(v, ctx)) is False:
+        if cond is None or A.holds(cond, A.video_attrs(v, ctx)) is False:
             views.append(obs[0])
     return {"n": len(views),
             "median": statistics.median(views) if views else None,
-            "label": f"{cond.get('label')}: не {cond.get('value')}"}
+            "label": (f"{cond.get('label')}: не {cond.get('value')}" if cond else
+                      "ролики того же периода вне эксперимента; условие гипотезы не "
+                      "машинное, среди них могут быть ролики с тем же признаком")}
 
 
 def rule_verdict(st, mine, base, ctl, n):

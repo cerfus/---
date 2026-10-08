@@ -350,8 +350,12 @@ def main():
     for i in range(5):
         E.link(cy, vid(i), tmp8, videos=vids)
     ev = E.evaluate(E.load(tmp8)[cy], stub, videos=vids, ctx=ctx)
-    check("V7 условие не записано — контроль не выдумывается",
-          ev["control"] is None and "контрол" not in ev["summary"])
+    ctl = ev.get("control") or {}
+    check("V7 гипотеза без машинного условия — контроль: ролики периода вне "
+          "эксперимента, и это сказано (условие не выдумывается)",
+          ctl.get("n") == 4 and ctl.get("median") == 800
+          and "условие гипотезы не машинное" in ctl.get("label", "")
+          and "условие гипотезы не машинное" in ev["summary"], str(ctl))
 
     print("\n=== R. итог по правилу, записанному заранее ===")
     check("R1 правило итога записано при регистрации",

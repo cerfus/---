@@ -132,6 +132,12 @@ def dashboard(ask):
     D.main([])
 
 
+def algorithm(ask):
+    from advisor import algorithm as G, analysis as A
+    snaps, videos = G.load()
+    print(G.render(G.study(snaps, videos, A.analyze())))
+
+
 def update(ask):
     print("Свои эксперименты и идеи сохраняются коммитом, остальные локальные")
     print("изменения откладываются в git stash. Ничего не удаляется.\n")
@@ -184,12 +190,13 @@ ITEMS = (
     ("6", "План публикаций и календарь (.ics)", plan),
     ("7", "Дашборд в браузере", dashboard),
     ("8", "Загрузить видео из data\\assets\\incoming", ingest),
-    ("9", "Обновить программу из GitHub", update),
-    ("10", "Отправить мои эксперименты и идеи в GitHub", push),
-    ("11", "Обновить базу после ручного git pull", sync),
-    ("12", "Готовность программы", doctor),
-    ("13", "Полная проверка (verify_all)", verify),
-    ("14", "Миграции (--adopt)", migrate),
+    ("9", "Как алгоритм раздаёт ролики и план улучшения", algorithm),
+    ("10", "Обновить программу из GitHub", update),
+    ("11", "Отправить мои эксперименты и идеи в GitHub", push),
+    ("12", "Обновить базу после ручного git pull", sync),
+    ("13", "Готовность программы", doctor),
+    ("14", "Полная проверка (verify_all)", verify),
+    ("15", "Миграции (--adopt)", migrate),
     ("0", "Выход", None),
 )
 

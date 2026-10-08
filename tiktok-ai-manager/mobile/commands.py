@@ -95,6 +95,12 @@ def _plan(_):
             + E.render(E.load(), a))
 
 
+def _algo(_):
+    from advisor import algorithm as G, analysis as A
+    snaps, videos = G.load()
+    return G.render(G.study(snaps, videos, A.analyze()))
+
+
 def _refresh(_):
     return F.refresh(S.check_services())
 
@@ -115,11 +121,12 @@ REGISTRY = {c.name: c for c in (
     Command("/hits", "what took off and why (verified data)", _hits),
     Command("/next", "latest saved ideas for next videos", _next),
     Command("/plan", "publication plan and experiments (read-only)", _plan),
+    Command("/algo", "how the account's videos get distributed, improvement plan", _algo),
     Command("/refresh", "verify services (read-only)", _refresh),
     Command("/help", "commands", _help),
 )}
 
-ORDER = ("/status", "/hits", "/next", "/plan", "/report", "/insights", "/ideas",
+ORDER = ("/status", "/hits", "/next", "/plan", "/algo", "/report", "/insights", "/ideas",
          "/scripts", "/experiments", "/queue", "/refresh", "/help")
 
 
