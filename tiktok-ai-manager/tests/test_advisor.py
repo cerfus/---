@@ -227,6 +227,10 @@ def run_all(real_make_client):
     brief = I.build_brief(a)
     hits = [v["video_id"] for v in a["videos"] if v["hit"]]
     flop = next(v["video_id"] for v in a["videos"] if v["mature"] and not v["hit"])
+    ver_part, unver_part = I.brief_parts(a)
+    check("D0a рост от сверенного значения попадает в бриф, и только в несверенную часть",
+          "РОСТ ОТ ПОСЛЕДНЕГО СВЕРЕННОГО" in unver_part
+          and "РОСТ ОТ ПОСЛЕДНЕГО СВЕРЕННОГО" not in ver_part)
     check("D0 число-приманка 4242 в брифе отсутствует",
           "4242" not in I.numbers_in(brief))
     good_l1 = {"id": "L1",
@@ -299,6 +303,14 @@ def run_all(real_make_client):
           "неизвестную гипотезу" in rej.get("По отвергнутой гипотезе", ""))
     check("D18 отброшенное показывается, а не исчезает",
           "Отброшено проверкой: 6" in I.render(r))
+
+    rs = I.from_payload(payload, a)
+    check("D18a готовый ответ (сессия) проверяется так же строго, как ответ API",
+          [i["title"] for i in rs["ideas"]] == [i["title"] for i in r["ideas"]]
+          and {x["id"] for x in rs["rejected"]} == {x["id"] for x in r["rejected"]})
+    check("D18b источник честно назван: сессия, а не API",
+          rs["mode"] == "session" and all(i["source"] == "session" for i in rs["ideas"])
+          and "сессия" in I.render(rs))
 
     for name, client, why in (
             ("D19 отказ модели", FakeClient("{}", stop="refusal"), "отказалась"),

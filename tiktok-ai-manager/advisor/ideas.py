@@ -149,8 +149,9 @@ def brief_parts(a):
               for g in growth]
         U.append("")
     if a.get("unverified"):
-        U = ["НЕ СВЕРЕНО — только один источник, второй недоступен. Это не факты: "
-             f"упоминать только с пометкой «{UNVERIFIED_MARK}».", ""]
+        # += а не =: присваивание затирало блок роста, и модель его не видела
+        U += ["НЕ СВЕРЕНО — только один источник, второй недоступен. Это не факты: "
+              f"упоминать только с пометкой «{UNVERIFIED_MARK}».", ""]
         for u in a["unverified"]:
             U.append(f"- video_id {u['video_id']} | просмотров {u['views']} на "
                      f"{u['observed_at'][:10]} | возраст {u['age_days']} дн. | "
@@ -385,6 +386,26 @@ def call_model(client, brief, sdk=None):
 
 # ──────────────────────────────── прогон ─────────────────────────────────────
 
+def from_payload(payload, a=None, source="session"):
+    """Готовый ответ в схеме SCHEMA — через те же проверки, что ответ API.
+
+    Источник ответа — модель Claude в рабочей сессии или любой другой
+    генератор; на доверие это не влияет: принимается только то, что
+    прошло validate(), отброшенное показывается с причиной.
+    """
+    a = A.analyze() if a is None else a
+    brief = build_brief(a)
+    hyps, ideas, rejected = validate(payload, a, brief)
+    for x in hyps + ideas:
+        x["source"] = source
+    return {"policy_version": IDEAS_POLICY_VERSION,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "analysis_policy": a["policy_version"], "mode": source,
+            "model": "Claude, рабочая сессия" if source == "session" else source,
+            "note": None if ideas else "ни одна идея не прошла проверку",
+            "new_hypotheses": hyps, "ideas": ideas, "rejected": rejected}
+
+
 def generate(a=None, client=None, offline=False, sdk=None):
     """Полный прогон. Возвращает результат; ничего не пишет на диск."""
     a = A.analyze() if a is None else a
@@ -414,7 +435,8 @@ def generate(a=None, client=None, offline=False, sdk=None):
 def render(r):
     L = ["ИДЕИ ДЛЯ СЛЕДУЮЩИХ РОЛИКОВ",
          ("режим: модель " + r["model"]) if r["mode"] == "model"
-         else "режим: шаблоны экспериментов, без модели"]
+         else (f"режим: {r['model']}" if r["mode"] == "session"
+               else "режим: шаблоны экспериментов, без модели")]
     if r["note"]:
         L.append(f"примечание: {r['note']}")
     if r["new_hypotheses"]:

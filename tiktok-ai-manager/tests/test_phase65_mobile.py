@@ -535,7 +535,13 @@ def test_J_advisor_commands():
         r = run(cmd, user_id=STRANGER, update_id=910)
         check(f"J2 {cmd} постороннему отвергнута", r["status"] == "denied", r["status"])
 
-    r = run("/next", update_id=920)
+    # пустой каталог задаётся явно: в репозитории идеи уже могут лежать
+    saved = E.IDEAS_DIR
+    E.IDEAS_DIR = Path(tempfile.mkdtemp(prefix="no_ideas_"))
+    try:
+        r = run("/next", update_id=920)
+    finally:
+        E.IDEAS_DIR = saved
     check("J3 /next без идей объясняет, где их создают",
           "на ПК" in r["text"] and "С телефона идеи не создаются" in r["text"])
     tmp = Path(tempfile.mkdtemp(prefix="ideas_"))
