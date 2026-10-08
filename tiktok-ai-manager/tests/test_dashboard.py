@@ -86,6 +86,27 @@ def main():
                         "RECOMMENDATION")
     check("C1 текст страницы без причинных и оценочных конструкций", not v, str(v))
 
+    print("\n=== P. план публикаций ===")
+    from advisor import experiments as E, plan as PL
+    ctx = A.context()
+    _f, ideas = E.latest_ideas()
+    rows = [r for r in PL.build(ideas, a, ctx=ctx) if r["at"]]
+    plan_html = page.split("<h2>План публикаций</h2>")[1].split("<h2>")[0] \
+        if "<h2>План публикаций</h2>" in page else ""
+    check("P1 на странице план: каждая идея со своим временем, как в пункте 6",
+          rows and all(D.esc(r["idea"]["title"]) in plan_html
+                       and PL._fmt_local(r["at"], ctx) in plan_html for r in rows),
+          f"строк {len(rows)}")
+    hostile = [dict(ideas[0], title='<img src=x onerror=alert(3)>', _snapshot=None)]
+    p3 = D.build(a, ideas_file=None, ideas=hostile)
+    check("P2 название идеи в плане экранируется",
+          "<img src=x onerror=alert(3)>" not in p3 and "&lt;img src=x" in p3)
+    check("P3 без идей — понятная строка, а не пустая таблица",
+          "Плана нет" in bare)
+    v = find_violations(text_of(page).replace("Причинность не установлена", ""),
+                        "RECOMMENDATION")
+    check("P4 вся страница с планом и идеями проходит валидатор формулировок", not v, str(v))
+
     print("\n=== D. запуск ===")
     calls = []
     saved = webbrowser.open

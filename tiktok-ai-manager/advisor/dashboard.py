@@ -253,6 +253,41 @@ def growth(a):
             + '</tbody></table></div>')
 
 
+def plan_section(a, states, ideas):
+    """План публикаций и прогресс экспериментов — тем же advisor.plan, что
+    пункт 6 меню и /plan, только без записи календаря."""
+    from advisor import plan as PL
+    out = ["<h2>План публикаций</h2>"]
+    if not ideas:
+        return out + ['<p class="note">Плана нет: нет сохранённых идей — пункт 4 меню.</p>']
+    ctx = A.context()
+    rows = PL.build(ideas, a, ctx=ctx, states=states)
+    out.append('<p class="note">RECOMMENDATION · один ролик в день. Время подобрано так, '
+               "чтобы ролик проверял свою гипотезу и не попадал в окна остальных гипотез "
+               f"о времени; пояс — {esc(ctx.get('tz_name') or 'UTC')}. Календарь .ics — "
+               'пункт 6 меню.</p><div class="card scroll"><table><thead><tr><th>Когда</th>'
+               "<th>Идея</th><th>Проверяет</th><th>Что сделать</th></tr></thead><tbody>")
+    for r in rows:
+        title = r["idea"].get("title")
+        if r.get("done"):
+            when, todo = "—", f"вышла ({r['done']})"
+        elif r["stale"] or r["at"] is None:
+            when, todo = "—", r["stale"] or r["note"]
+        else:
+            when = f"{PL._fmt_local(r['at'], ctx)} ({r['at']:%H:%M} UTC)"
+            todo = (f"в работе {r['taken']}: после публикации привязать ролик"
+                    if r.get("taken") else f"до публикации взять идею №{r['n']} (пункт 5)")
+        hyp = r["hypothesis"] + (f", смешано с {', '.join(r['mixed'])}" if r["mixed"] else "")
+        out.append(f"<tr><td>{esc(when)}</td><td>{esc(title)}</td><td>{esc(hyp)}</td>"
+                   f"<td>{esc(todo)}</td></tr>")
+    out.append("</tbody></table></div>")
+    prog = [l.strip() for l in PL.progress(rows, states)[1:] if l.strip()]
+    if prog:
+        out.append('<div class="card"><b>Прогресс экспериментов</b><ul>'
+                   + "".join(f"<li>{esc(l)}</li>" for l in prog) + "</ul></div>")
+    return out
+
+
 def build(a=None, states=None, ideas_file=None, ideas=None):
     a = A.analyze() if a is None else a
     states = E.load() if states is None else states
@@ -290,6 +325,8 @@ def build(a=None, states=None, ideas_file=None, ideas=None):
         f'<div class="card kpi"><div class="label">{esc(l)}</div>'
         f'<div class="value">{esc(v)}</div><div class="ctx">{esc(c)}</div></div>'
         for l, v, c in kpi) + "</div>")
+    # план — первым после чисел: это то, что делать на этой неделе
+    P += plan_section(a, states, ideas or [])
 
     P.append("<h2>Просмотры по роликам</h2>")
     P.append(bars(a["videos"], "Все сверенные ролики",
@@ -367,7 +404,8 @@ def build(a=None, states=None, ideas_file=None, ideas=None):
                  f'<td>{esc(v["weekday"])} {v["hour_utc"]:02d}:00</td><td>{kind}</td></tr>')
     P.append("</tbody></table></div></details>")
     P.append(f"<p class=\"note\" style=\"margin-top:24px\">Собрано из data/ · политика "
-             f"{esc(a['policy_version'])} · часовой пояс аудитории не подтверждён, время в UTC</p>")
+             f"{esc(a['policy_version'])} · время в таблицах роликов — UTC, в плане — по "
+             "поясу бренда из настроек Metricool</p>")
     P.append(f"<div id=\"tip\" role=\"tooltip\"></div><script>{JS}</script></div></body></html>")
     return "\n".join(P)
 
