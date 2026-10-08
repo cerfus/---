@@ -231,6 +231,45 @@ def main():
     check("P4b выгрузка подтвердила порядок — ролик идёт в счёт",
           ev["n_mature"] == 1 and ev["n_above"] == 1, ev["summary"])
 
+    print("\n=== H. один эксперимент на гипотезу ===")
+    tmp5 = Path(tempfile.mkdtemp()) / "register.jsonl"
+    i1 = dict(IDEA, title="Первая")
+    i2 = dict(IDEA, title="Вторая")
+    c5 = E.register_idea(i1, analysis_stub(1000), tmp5, now="2026-10-01T00:00:00+00:00")
+    before = E.load(tmp5)
+    c6 = E.register_idea(i2, analysis_stub(5000), tmp5, now="2026-10-03T00:00:00+00:00")
+    st = E.load(tmp5)[c5]
+    check("H1 вторая идея под ту же гипотезу — в тот же эксперимент",
+          c6 == c5 and [i["title"] for i in st["ideas"]] == ["Первая", "Вторая"]
+          and E._read(tmp5)[-1]["event"] == "idea_added")
+    check("H2 база сравнения — с первой регистрации, не сдвинута второй",
+          st["base"]["baseline"]["median_views_mature"] == 1000
+          and st["created_at"].startswith("2026-10-01"))
+    msg = E.taken_message(c6, before, E.load(tmp5))
+    check("H3 человеку сказано, что идея добавлена и сколько нужно роликов",
+          "добавлена к" in msg and "нужно 5" in msg, msg[:80])
+    try:
+        E.register_idea(i1, analysis_stub(1000), tmp5)
+        dup = False
+    except ValueError as exc:
+        dup = "уже в работе" in str(exc)
+    check("H4 ту же идею дважды не взять", dup)
+    other = dict(IDEA, title="Другая гипотеза", tests_hypothesis="H9", data_basis="X связан с Y")
+    c7 = E.register_idea(other, analysis_stub(1000), tmp5)
+    check("H5 другая гипотеза — новый эксперимент", c7 != c5)
+    v1 = {"5" + "0" * 17: {"video_id": "5" + "0" * 17,
+                           "published_at": "2026-10-04T10:00:00+00:00"}}
+    E.link(c5, "5" + "0" * 17, tmp5, videos=v1)
+    ids = E.idea_states(E.load(tmp5))
+    check("H6 первая привязка засчитана первой идее, вторая ещё в работе",
+          ids["Первая"] == (c5, "published") and ids["Вторая"] == (c5, "taken"), str(ids))
+    txt = E.render(E.load(tmp5), analysis_stub(1000), videos=v1)
+    check("H8 в списке видны идеи эксперимента и сколько роликов привязано",
+          "«Первая»; «Вторая»" in txt and "роликов привязано 1" in txt)
+    E.conclude(c5, "stub", "закрыт", "нет", tmp5)
+    c8 = E.register_idea(dict(IDEA, title="Третья"), analysis_stub(1000), tmp5)
+    check("H7 к закрытому эксперименту не присоединяется — новый", c8 not in (c5, c7))
+
     print("\n=== G. какие идеи считаются последними ===")
     d = Path(tempfile.mkdtemp())
     (d / "20261001T000000_session.json").write_text(json.dumps(

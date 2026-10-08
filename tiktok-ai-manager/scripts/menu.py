@@ -85,13 +85,13 @@ def experiments(ask):
             if not n.isdigit() or not 1 <= int(n) <= len(ideas):
                 print("нет такой идеи")
                 continue
+            before = E.load()
             try:
                 code = E.register_idea(ideas[int(n) - 1], a)
             except ValueError as exc:
                 print(f"не зарегистрировано: {exc}")
                 continue
-            print(f"\n{code} зарегистрирован ДО публикации, база сравнения "
-                  "зафиксирована. Снимите и выложите ролик, затем — пункт 3.")
+            print("\n" + E.taken_message(code, before, E.load()))
         elif c == "3":
             code = (ask("  код эксперимента (EXP-…) > ") or "").strip().upper()
             video = ask("  ссылка на ролик или video_id > ") or ""

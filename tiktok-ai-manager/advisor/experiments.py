@@ -10,6 +10,9 @@ experiments/register.jsonl — append-only. Прежние записи (EXP-001
 дописанные после неё. Событие — строка с ключом "event":
 
   registered — идея взята в работу ДО публикации (предрегистрация);
+  idea_added — ещё одна идея под ту же гипотезу добавлена в открытый
+               эксперимент: вывод требует min_sample роликов, и один
+               эксперимент на каждую идею не набрал бы их никогда;
   linked     — к эксперименту привязан опубликованный ролик;
   concluded  — эксперимент закрыт: итог и ссылка на доказательство;
   blocked    — эксперимент запрещён политикой, с машинной причиной.
@@ -92,9 +95,12 @@ def load(path=REGISTER):
                 "hypothesis": r["hypothesis"], "created_at": r["at"],
                 "min_sample": r.get("min_sample", DEFAULT_MIN_SAMPLE),
                 "success_criteria": r.get("success_check"),
-                "videos": [], "events": [], "origin": "idea", "base": r}
+                "videos": [], "events": [], "origin": "idea", "base": r,
+                "ideas": [r["idea"]] if r.get("idea") else []}
         st["events"].append(r)
-        if r["event"] == "linked":
+        if r["event"] == "idea_added":
+            st.setdefault("ideas", []).append(r["idea"])
+        elif r["event"] == "linked":
             st["videos"].append(r["video_id"])
             st.setdefault("links", {})[r["video_id"]] = r
             if st["status"] in ("proposed", "preregistered"):
@@ -144,12 +150,28 @@ def register_idea(idea, analysis, path=REGISTER, now=None):
     if not statement:
         raise ValueError("у идеи нет проверяемой гипотезы")
     states = load(path)
+    title = idea.get("title")
+    for st in states.values():
+        if title and any(i.get("title") == title for i in st.get("ideas", [])):
+            raise ValueError(f"идея «{title}» уже в работе: {st['code']}")
+    card = {k: idea.get(k, "") for k in ("title", "what_to_film",
+                                         "caption_draft", "when_to_post")}
+    # Та же гипотеза уже проверяется — идея присоединяется к открытому
+    # эксперименту: база сравнения остаётся замороженной с его регистрации,
+    # а ролики копятся до min_sample, а не расползаются по экспериментам.
+    same = [st for st in states.values()
+            if st["origin"] == "idea" and st["hypothesis"] == statement
+            and st["status"] in ("preregistered", "running")]
+    if same:
+        code = same[0]["code"]
+        _append(path, {"event": "idea_added", "code": code, "at": now or _now(),
+                       "idea": card})
+        return code
     code = next_code(states)
     _append(path, {
         "event": "registered", "code": code, "at": now or _now(),
         "hypothesis_id": hid, "hypothesis": statement,
-        "idea": {k: idea.get(k, "") for k in ("title", "what_to_film",
-                                              "caption_draft", "when_to_post")},
+        "idea": card,
         "success_check": idea.get("success_check"),
         "min_sample": DEFAULT_MIN_SAMPLE, "maturity_days": MATURITY_DAYS,
         # база сравнения фиксируется В МОМЕНТ регистрации: потом её не
@@ -226,6 +248,12 @@ def link(code, video, path=REGISTER, now=None, videos=None):
         return False, (f"ролик опубликован {when[:16]} ({source}), раньше регистрации "
                        f"{code} ({reg_at[:16]}): результат был известен до "
                        "эксперимента, такая проверка — подгонка")
+    # ролик засчитывается идее эксперимента по очереди взятия: первая
+    # привязка — первой идее, вторая — второй. Нужно плану: вышедшие идеи
+    # больше не планируются
+    ideas = st.get("ideas") or []
+    if len(st["videos"]) < len(ideas):
+        record["idea_title"] = ideas[len(st["videos"])].get("title")
     _append(path, record)
     return True, ("ролика пока нет в выгрузке — привязан по дате из ID, порядок "
                   "перепроверится, когда он появится" if v is None else None)
@@ -331,8 +359,8 @@ def evaluate(st, analysis, videos=None):
     elif not st["videos"]:
         out["summary"] = "ждёт публикации: привяжите ролик после выхода"
     elif out["n_mature"] < need:
-        out["summary"] = (f"зрелых роликов {out['n_mature']} из {need} — "
-                          "вывода пока нет")
+        out["summary"] = (f"роликов привязано {len(st['videos'])}, зрелых "
+                          f"{out['n_mature']} из {need} — вывода пока нет")
     else:
         out["summary"] = (f"{out['n_above']} из {out['n_mature']} зрелых роликов выше "
                           f"медианы базы, n={out['n_mature']}")
@@ -358,6 +386,8 @@ def render(states, analysis, videos=None):
         elif st["status"] == "concluded":
             L.append(f"    итог: {st.get('verdict')} — {st.get('result')}")
         else:
+            if st.get("ideas"):
+                L.append("    идеи: " + "; ".join(f"«{i.get('title')}»" for i in st["ideas"]))
             if ev.get("baseline") is not None:
                 L.append(f"    база: медиана зрелых {A._num(ev['baseline'])} "
                          f"(зафиксирована при регистрации)")
@@ -367,6 +397,33 @@ def render(states, analysis, videos=None):
             L.append(f"    {ev['summary']}")
         L.append("")
     return "\n".join(L).rstrip()
+
+
+def taken_message(code, before, after):
+    """Что сказать человеку после «взять идею в работу»."""
+    st = after[code]
+    tail = ("Снимите и выложите ролик, затем привяжите его: меню 5 → 3 "
+            f"(или python -m advisor.experiments link {code} <ссылка>).")
+    if code not in before:
+        return (f"{code} зарегистрирован ДО публикации, база сравнения зафиксирована. "
+                + tail)
+    need = st.get("min_sample") or DEFAULT_MIN_SAMPLE
+    return (f"идея добавлена к {code}: он уже проверяет ту же гипотезу. Идей в нём "
+            f"{len(st.get('ideas') or [])}, роликов привязано {len(st['videos'])}, "
+            f"для вывода нужно {need} зрелых. База сравнения — прежняя, с "
+            f"{st['created_at'][:10]}. " + tail)
+
+
+def idea_states(states):
+    """{название идеи: (код, "published" | "taken")}: вышла ли идея роликом
+    или только взята в работу."""
+    out = {}
+    for st in states.values():
+        done = {(st.get("links") or {}).get(v, {}).get("idea_title") for v in st["videos"]}
+        for i in st.get("ideas") or []:
+            out[i.get("title")] = (st["code"], "published" if i.get("title") in done
+                                   else "taken")
+    return out
 
 
 # ─────────────────────────────── идеи ────────────────────────────────────────
@@ -424,13 +481,13 @@ def main(argv=None):
         if not 1 <= args.n <= len(ideas):
             print(f"идеи №{args.n} нет: в {path.name} их {len(ideas)}")
             return 1
+        before = load()
         try:
             code = register_idea(ideas[args.n - 1], a)
         except ValueError as exc:
             print(f"не зарегистрировано: {exc}")
             return 1
-        print(f"{code} зарегистрирован до публикации. После выхода ролика: "
-              f"python -m advisor.experiments link {code} <ссылка>")
+        print(taken_message(code, before, load()))
         return 0
     ok, why = link(args.code, args.video)
     print((f"привязано к {args.code}" + (f" — {why}" if why else ""))

@@ -183,6 +183,33 @@ def main():
     check("E9 в календаре нет слов про автопубликацию — только человек",
           "Публикует человек" in raw.decode("utf-8").replace("\r\n ", ""))
 
+    print("\n=== G. план помнит журнал экспериментов ===")
+    reg = Path(tempfile.mkdtemp()) / "register.jsonl"
+    first, second = ideas[0], ideas[1]
+    c1 = E.register_idea(dict(first, _snapshot=None), a, reg, now="2026-10-08T00:00:00+00:00")
+    c2 = E.register_idea(dict(second, _snapshot=None), a, reg, now="2026-10-08T00:00:00+00:00")
+    vid = str((int(datetime(2026, 10, 8, 19, tzinfo=timezone.utc).timestamp()) << 32) | 1)
+    ok, _ = E.link(c1, vid, reg, now="2026-10-08T20:00:00+00:00", videos={})
+    st = E.load(reg)
+    pg = P.build(ideas, a, start=START, ctx=ctx, states=st)
+    by_n = {r["n"]: r for r in pg}
+    check("G1 вышедшая идея в план не ставится",
+          ok and by_n[1]["done"] == c1 and by_n[1]["at"] is None)
+    check("G2 взятая в работу — в плане, с пометкой кода",
+          by_n[2]["taken"] == c2 and by_n[2]["at"] is not None)
+    gtxt = P.render(pg, a, ctx, states=st)
+    check("G3 в тексте: что уже вышло, что в работе, без повторной регистрации",
+          "уже вышли: «" + first["title"] + "»" in gtxt
+          and f"уже в работе: {c2}" in gtxt
+          and gtxt.count("до публикации: меню 5 → 2") == len(ideas) - 2)
+    check("G4 прогресс по эксперименту: сколько роликов есть и сколько нужно",
+          f"{c1} · {first['tests_hypothesis']}: роликов 1 из 5; ещё нужно 4" in gtxt
+          and "новые идеи под" in gtxt, [l for l in gtxt.splitlines() if c1 + " ·" in l])
+    gl = unfold(P.ics(pg, now=datetime(2026, 10, 8, tzinfo=timezone.utc)))
+    check("G5 в календаре вышедшей идеи нет",
+          not any(first["title"][:20] in l for l in gl if l.startswith("SUMMARY:"))
+          and lines.count("BEGIN:VEVENT") - gl.count("BEGIN:VEVENT") == 2)
+
     print("\n=== F. запуск ===")
     out = Path(tempfile.mkdtemp()) / "plan.ics"
     p = subprocess.run([sys.executable, "-m", "advisor.plan", "--start", "2026-10-09",

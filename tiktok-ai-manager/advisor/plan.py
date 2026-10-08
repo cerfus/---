@@ -73,7 +73,7 @@ def slot_for(idea_h, others, day, ctx):
     return None if best is None else (best[1], best[2])
 
 
-def build(ideas, analysis, start=None, ctx=None):
+def build(ideas, analysis, start=None, ctx=None, states=None):
     """[{idea, n, hypothesis, at, mixed, stale, note}] — в порядке дат.
 
     Каждая идея берёт ближайший свободный день, где смешения с чужими
@@ -81,8 +81,12 @@ def build(ideas, analysis, start=None, ctx=None):
     не встанет на воскресенье, пока есть гипотеза «воскресенье», — и этот
     день останется идее, которая её проверяет. n — номер идеи в файле, по
     нему её берут в работу.
+
+    Журнал экспериментов учитывается: идея, уже вышедшая роликом, в план не
+    ставится (done), взятая в работу — ставится с пометкой (taken).
     """
     ctx = A.context() if ctx is None else ctx
+    by_title = E.idea_states(E.load() if states is None else states)
     hyps = {h["id"]: h for h in analysis["hypotheses"]}
     timed = [h for h in analysis["hypotheses"] if h.get("attribute") in TIME_ATTRS
              and h.get("bounds")]
@@ -91,12 +95,15 @@ def build(ideas, analysis, start=None, ctx=None):
     for n, idea in enumerate(ideas, 1):
         hid = idea.get("tests_hypothesis")
         h = hyps.get(hid)
+        code, state = by_title.get(idea.get("title"), (None, None))
         rows.append({"n": n, "idea": idea, "hypothesis": hid, "at": None, "mixed": [],
                      "stale": E.stale_reason(idea, analysis), "note": None,
+                     "done": code if state == "published" else None,
+                     "taken": code if state == "taken" else None,
                      "_h": h if h is not None and h in timed else None})
     taken = set()
     for row in rows:
-        if row["stale"]:
+        if row["stale"] or row["done"]:
             continue
         others = [o for o in timed if o is not row["_h"]]
         best = None
@@ -126,15 +133,21 @@ def _fmt_local(at, ctx):
     return f"{wd} {loc:%d.%m %H:%M}"
 
 
-def render(plan, analysis, ctx, source=None):
+def render(plan, analysis, ctx, source=None, states=None):
     tzname = ctx.get("tz_name") or "UTC"
     L = ["ПЛАН ПУБЛИКАЦИЙ · RECOMMENDATION",
          f"идеи: {source or '—'}; гипотезы — по разбору на {analysis.get('observed_at')}",
          f"время — {tzname}, в скобках UTC; один ролик в день", ""]
     if not plan:
         return "\n".join(L + ["идей нет — сначала пункт «Идеи для следующих видео»"])
+    done = [r for r in plan if r.get("done")]
+    if done:
+        L += ["уже вышли: " + "; ".join(f"«{r['idea'].get('title')}» ({r['done']})"
+                                         for r in done), ""]
     for r in plan:
         title = r["idea"].get("title")
+        if r.get("done"):
+            continue
         if r["stale"]:
             L += [f"{r['n']}. «{title}» — не в плане: {r['stale']}", ""]
             continue
@@ -147,15 +160,45 @@ def render(plan, analysis, ctx, source=None):
                  + (f"; смешано с {', '.join(r['mixed'])}: развести не вышло, "
                     "итог не отделит одну гипотезу от другой" if r["mixed"]
                     else "; вне окон остальных гипотез о времени"))
-        L.append(f"   до публикации: меню 5 → 2, идея №{r['n']}; после — 5 → 3, ссылка")
+        L.append(f"   уже в работе: {r['taken']}; после публикации — 5 → 3, ссылка"
+                 if r.get("taken") else
+                 f"   до публикации: меню 5 → 2, идея №{r['n']}; после — 5 → 3, ссылка")
         L.append(f"   итог — не раньше {check_at.astimezone(_tz(ctx)):%d.%m} "
                  f"({A.MATURE_AGE_DAYS} дн.)")
         L.append("")
+    L += progress(plan, states)
     n = analysis["hypotheses"][0]["n_sample"] if analysis["hypotheses"] else 0
     L.append(f"Гипотезы стоят на n={n} зрелых роликах при пороге "
              f"{analysis.get('min_sample_required')}: план проверяет их, а не "
              "обещает охваты.")
     return "\n".join(L)
+
+
+def progress(plan, states=None):
+    """Сколько роликов ещё нужно каждому открытому эксперименту и хватает ли
+    под это идей в плане. Строки текста; пусто — открытых экспериментов нет."""
+    states = E.load() if states is None else states
+    open_ = [st for st in states.values()
+             if st["origin"] == "idea" and st["status"] in ("preregistered", "running")]
+    if not open_:
+        return []
+    L = ["Прогресс экспериментов:"]
+    for st in sorted(open_, key=lambda x: x["code"]):
+        hid = st["base"].get("hypothesis_id") or "—"
+        need = st.get("min_sample") or E.DEFAULT_MIN_SAMPLE
+        have = len(st["videos"])
+        planned = sum(1 for r in plan if r["at"] and not r.get("done")
+                      and r["hypothesis"] == hid)
+        line = f"  {st['code']} · {hid}: роликов {have} из {need}"
+        if have >= need:
+            line += " — набрано, ждём зрелости (30 дн.)"
+        else:
+            rest = need - have
+            line += f"; ещё нужно {rest}, в плане {planned}"
+            if planned < rest:
+                line += f" — новые идеи под {hid}: пункт 4"
+        L.append(line)
+    return L + [""]
 
 
 # ──────────────────────────────── .ics ───────────────────────────────────────
@@ -191,7 +234,7 @@ def ics(plan, now=None):
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//tiktok-ai-manager//plan//RU",
              "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:TikTok план"]
     for r in plan:
-        if r["at"] is None or r["stale"]:
+        if r["at"] is None or r["stale"] or r.get("done"):
             continue
         idea = r["idea"]
         title = idea.get("title") or "идея"
