@@ -23,6 +23,13 @@ spec.loader.exec_module(RB)
 RESULTS = []
 
 
+def empty_gitconfig():
+    """Путь к пустому временному файлу настроек git (дескриптор закрыт)."""
+    fd, path = tempfile.mkstemp(suffix=".gitconfig")
+    os.close(fd)
+    return path
+
+
 def check(name, ok, detail=""):
     RESULTS.append((name, bool(ok)))
     print(f"  [{'OK  ' if ok else 'FAIL'}] {name}" + (f"  {detail}" if detail else ""))
@@ -100,7 +107,8 @@ def main():
           == ["advisor/plan.py", "tests/test_plan.py"])
     base = Path(tempfile.mkdtemp())
     env_saved = os.environ.get("GIT_CONFIG_GLOBAL")
-    os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
+    # пустой файл, а не os.devnull: «nul» на Windows git может не принять
+    os.environ["GIT_CONFIG_GLOBAL"] = empty_gitconfig()
     try:
         g(base, "init", "-q")
         for rel in ("proj/data/a.json", "proj/advisor/b.py"):

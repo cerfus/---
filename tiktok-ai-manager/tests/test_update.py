@@ -27,6 +27,13 @@ SUB = "proj"
 ID = ["-c", "user.name=Session", "-c", "user.email=s@example.invalid"]
 
 
+def empty_gitconfig():
+    """Путь к пустому временному файлу настроек git (дескриптор закрыт)."""
+    fd, path = tempfile.mkstemp(suffix=".gitconfig")
+    os.close(fd)
+    return path
+
+
 def check(name, ok, detail=""):
     RESULTS.append((name, bool(ok)))
     print(f"  [{'OK  ' if ok else 'FAIL'}] {name}" + (f"  {detail}" if detail else ""))
@@ -81,7 +88,8 @@ def run(fn, **kw):
 
 def main():
     saved_env = {k: os.environ.get(k) for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
-    os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
+    # пустой файл, а не os.devnull: «nul» на Windows git может не принять
+    os.environ["GIT_CONFIG_GLOBAL"] = empty_gitconfig()
     os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
     real_head = g(ROOT, "rev-parse", "HEAD")
     try:
