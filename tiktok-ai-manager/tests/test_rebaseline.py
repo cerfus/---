@@ -62,7 +62,7 @@ def main():
                 RAW_SET=new["RAW_SET"] + ["2026-10-15T090000Z_metricool_posts_r5.json"],
                 FEATURE_STATUSES={"derived": 200, "insufficient_baseline": 54,
                                   "observed": 370, "unavailable": 186})
-    fake["UPSTREAM"] = dict(new["UPSTREAM"], analytics="a" * 64)
+    fake["UPSTREAM"] = dict(new["UPSTREAM"], analytics="a" * 64, reconciliation="c" * 64)
     src = RB.GOLDEN.read_text(encoding="utf-8")
     text = RB.rewrite(src, old, fake, "R5: проверка")
     tmp = Path(tempfile.mkdtemp()) / "golden.py"
@@ -147,6 +147,27 @@ def main():
               rc == 0 and RB.current(copy_)["N_VIDEOS"] == 18 and "записан" in out)
     finally:
         RB.changed_paths, RB.compute, RB.GOLDEN = saved
+
+    print("\n=== E. порядок шагов ===")
+    stale_fake = dict(copy.deepcopy(fake), UPSTREAM=dict(new["UPSTREAM"]))
+    check("E1 сырьё с наблюдениями при прежнем хеше сверки — производные не пересобраны",
+          RB.stale_derived(old, stale_fake) == ["2026-10-15T090000Z_metricool_posts_r5.json"])
+    check("E2 сдвинулся хеш сверки — порядок верный",
+          RB.stale_derived(old, fake) == [])
+    besttime = sorted(x.name for x in (ROOT / "data" / "raw").glob("*_metricool_besttime_*.json"))
+    no_obs = dict(copy.deepcopy(new),
+                  RAW_SET=[n for n in new["RAW_SET"] if n not in besttime[-1:]])
+    check("E3 файл-не-наблюдение (оценка активности) хеш сверки не двигает — не отказ",
+          besttime and RB.stale_derived(no_obs, new) == [])
+    saved = (RB.changed_paths, RB.compute)
+    try:
+        RB.changed_paths = lambda root=None: ["data/raw/x.json"]
+        RB.compute = lambda root=None: stale_fake
+        rc, out = quiet(RB.main, ["--why", "R5"])
+    finally:
+        RB.changed_paths, RB.compute = saved
+    check("E4 команда отказывает (2) и называет верный порядок, эталон не тронут",
+          rc == 2 and "verify_all.sh" in out and sha(RB.GOLDEN) == real, out[:90])
 
     check("Z1 настоящий tests/golden.py не изменён тестом", sha(RB.GOLDEN) == real)
     failed = [n for n, ok in RESULTS if not ok]

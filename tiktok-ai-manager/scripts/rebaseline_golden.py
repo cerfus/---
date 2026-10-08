@@ -16,6 +16,12 @@
     (insights.run.input_hashes / build, файл признаков, data/raw);
   * прежние значения дописываются в HISTORY, а не теряются.
 
+Порядок: СНАЧАЛА полная проверка (bash scripts/verify_all.sh) — она
+пересобирает производные данные (сверку, аналитику, признаки, выводы) и
+падает только на эталонах; ПОТОМ этот пересчёт; потом проверка снова.
+Обратный порядок прочёл бы устаревшие производные файлы — инструмент
+это ловит: пришло сырьё с наблюдениями, а хеш сверки не сдвинулся.
+
 После записи обязательна полная проверка: если провалилось что-то кроме
 эталонов, оно провалится и после пересчёта — это дефект, а не сдвиг.
 """
@@ -93,6 +99,20 @@ def current(golden_path=None):
             "_history_len": len(ns["HISTORY"])}
 
 
+def stale_derived(old, new, root=ROOT):
+    """Новые файлы сырья с наблюдениями при неизменном хеше сверки —
+    производные данные не пересобраны. Список таких файлов или []."""
+    added = sorted(set(new["RAW_SET"]) - set(old["RAW_SET"]))
+    obs = []
+    for name in added:
+        f = Path(root) / "data" / "raw" / name
+        meta = json.loads(f.read_text(encoding="utf-8")).get("_meta", {}) if f.exists() else {}
+        if meta.get("usable_as_observation") is not False:
+            obs.append(name)
+    same = new["UPSTREAM"].get("reconciliation") == old["UPSTREAM"].get("reconciliation")
+    return obs if obs and same else []
+
+
 def diff(old, new):
     return [k for k in new if old.get(k) != new[k]]
 
@@ -161,6 +181,12 @@ def main(argv=None):
               "отдельно, прогоните проверку, затем добавьте сырьё.")
         return 2
     old, new = current(), compute()
+    stale = stale_derived(old, new)
+    if stale:
+        print("ОТКАЗ: пришло сырьё с наблюдениями (" + ", ".join(stale) + "), а хеш сверки "
+              "не сдвинулся — производные данные не пересобраны. Сначала "
+              "bash scripts/verify_all.sh (упадут только эталоны), затем этот пересчёт.")
+        return 2
     changed = diff(old, new)
     if not changed:
         print("эталон актуален — пересчитывать нечего")

@@ -94,10 +94,17 @@ def main():
           in tr["_meta"]["result"])
 
     print("\n=== E. повтор без изменений не становится наблюдением ===")
-    same = IE.build("posts", {"rows": r4["rows"]}, "R9", "2026-12-01T00:00:00Z", "a", "b")
+    # последняя выгрузка ищется здесь отдельно от проверяемой функции: тест
+    # не должен ломаться от следующего раунда данных (так было с R4 «навсегда»)
+    posts = [(json.loads(f.read_text(encoding="utf-8")), f)
+             for f in (ROOT / "data" / "raw").glob("*_metricool_posts*.json")]
+    posts = [(d["_meta"].get("fetched_at") or d["_meta"].get("pulled_at"), f, d)
+             for d, f in posts if d["_meta"].get("usable_as_observation") is not False]
+    _at, last_f, last_d = max(posts, key=lambda x: x[0])
+    same = IE.build("posts", {"rows": last_d["rows"]}, "R9", "2026-12-01T00:00:00Z", "a", "b")
     check("E1 ответ, совпадающий с последней выгрузкой, распознан",
-          IE.same_as_latest(same) == R4.name, str(IE.same_as_latest(same)))
-    rows2 = [list(r) for r in r4["rows"]]
+          IE.same_as_latest(same) == last_f.name, str(IE.same_as_latest(same)))
+    rows2 = [list(r) for r in last_d["rows"]]
     rows2[0][4] = str(int(rows2[0][4]) + 1)
     changed = IE.build("posts", {"rows": rows2}, "R9", "2026-12-01T00:00:00Z", "a", "b")
     check("E2 изменился один просмотр — уже новые данные", IE.same_as_latest(changed) is None)
