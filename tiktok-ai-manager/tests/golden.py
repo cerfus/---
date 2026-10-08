@@ -33,6 +33,8 @@ RAW_SET = frozenset({
     "2026-09-17T100244Z_supermetrics_videos_r3b.json",
     "2026-10-08T210821Z_metricool_posts_r4.json",
     "2026-10-08T210821Z_metricool_traffic_r4.json",
+    "2026-10-08T213639Z_metricool_besttime_r4.json",
+    "2026-10-08T213639Z_metricool_brand_r4.json",
 })
 
 N_VIDEOS = 17
@@ -70,6 +72,10 @@ HISTORY = [
             "analytics_hash сдвинут ещё и правкой WINDOW_NO_DATA_REASON: прежний "
             "текст утверждал, что все ролики опубликованы до подключения, — "
             "с R4 это неверно. Без этой правки было бы 2b651944d2c9940d…"},
+    {"raw": "R4+, 2026-10-08: активность аудитории и настройки бренда",
+     "why": "два файла-не-наблюдения (usable_as_observation=false): normalize их "
+            "не читает, поэтому ни один хеш не сдвинулся — провалилась только "
+            "проверка состава сырья, как и должна."},
 ]
 
 
