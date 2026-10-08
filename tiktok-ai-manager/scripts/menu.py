@@ -47,6 +47,46 @@ def ideas(ask):
     _sub("-m", "advisor.run", "ideas")
 
 
+def experiments(ask):
+    """Подменю: журнал экспериментов. Регистрация — строго до публикации."""
+    from advisor import analysis as A, experiments as E
+    while True:
+        print("\n  Эксперименты\n"
+              "   1  Список и итоги\n"
+              "   2  Взять идею в работу (до публикации!)\n"
+              "   3  Привязать опубликованный ролик\n"
+              "   0  Назад\n")
+        c = ask("  Выбор > ")
+        if c is None or c.strip() == "0":
+            return
+        c = c.strip()
+        a = A.analyze()
+        if c == "1":
+            print(E.render(E.load(), a))
+        elif c == "2":
+            path, ideas = E.latest_ideas()
+            if not ideas:
+                print("идей нет — сначала пункт 4 главного меню")
+                continue
+            print(f"\nидеи из {path.name}:")
+            for i, idea in enumerate(ideas, 1):
+                print(f"  {i}. {idea['title']}  (проверяет {idea['tests_hypothesis']})")
+            n = (ask("  номер идеи > ") or "").strip()
+            if not n.isdigit() or not 1 <= int(n) <= len(ideas):
+                print("нет такой идеи")
+                continue
+            code = E.register_idea(ideas[int(n) - 1], a)
+            print(f"\n{code} зарегистрирован ДО публикации, база сравнения "
+                  "зафиксирована. Снимите и выложите ролик, затем — пункт 3.")
+        elif c == "3":
+            code = (ask("  код эксперимента (EXP-…) > ") or "").strip().upper()
+            video = ask("  ссылка на ролик или video_id > ") or ""
+            ok, why = E.link(code, video)
+            print(f"привязано к {code}" if ok else f"не привязано: {why}")
+        else:
+            print(f"нет пункта «{c}»")
+
+
 def ingest(ask):
     print("Видео берутся из data\\assets\\incoming, имя файла = video_id.mp4\n")
     _sub("-m", "assets.ingest", "--load")
@@ -71,9 +111,10 @@ ITEMS = (
     ("2", "Последний отчёт", report),
     ("3", "Что залетело и почему", analyze),
     ("4", "Идеи для следующих видео", ideas),
-    ("5", "Загрузить видео из data\\assets\\incoming", ingest),
-    ("6", "Полная проверка (verify_all)", verify),
-    ("7", "Миграции (--adopt)", migrate),
+    ("5", "Эксперименты: взять идею, привязать ролик, итоги", experiments),
+    ("6", "Загрузить видео из data\\assets\\incoming", ingest),
+    ("7", "Полная проверка (verify_all)", verify),
+    ("8", "Миграции (--adopt)", migrate),
     ("0", "Выход", None),
 )
 
