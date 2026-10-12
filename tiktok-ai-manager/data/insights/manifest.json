@@ -1,14 +1,14 @@
 {
   "input_hashes": {
-    "analytics": "88800c0b779aef6ccfbc3398752be30760d54d81bdb8bc9876648ee5ad4c0846",
-    "features": "631999988be9d2302c5e098217627f8616c144598b55f674f5027ff1725780b3",
-    "reconciliation": "fd98b3114568b023f83c132ed9d544b1b02f69d7c575dbce0d78bdbf3303b645"
+    "analytics": "d67b45fc2412f80c0d64b0cc5528c807efeb14e05313517063a3894b87471047",
+    "features": "60078e88219a2c0870f095630d31b55199bd2fb27ea30eb68e9b56939269016d",
+    "reconciliation": "9663765cefed6b2b55dbe606ef1a344f2efd002237be6a9d226036f8b7f72ee6"
   },
-  "insights_hash": "35e4320dc54ed67f13844be5672ae849340e6ad2ee49edc7e128073a5c2867a8",
-  "insights_run_id": "3004e5d2-9a95-51f2-aba8-d74ee206cb0a",
+  "insights_hash": "d5d2556e8a49eddbd79d0e134767bd330279543de67410068d758589caf0e50e",
+  "insights_run_id": "e80cf64e-090f-56d7-a262-9b2385a13e97",
   "n_blocked": 31,
   "n_insights": 14,
-  "period": "2026-10-08",
+  "period": "2026-10-12",
   "policy_version": "insights-policy-1.0.0",
-  "report_path": "reports/daily/2026-10-08.md"
+  "report_path": "reports/daily/2026-10-12.md"
 }

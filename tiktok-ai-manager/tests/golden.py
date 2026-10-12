@@ -24,29 +24,30 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Сырьё, на котором посчитан эталон. Расхождение — первое, что видно в тесте.
 RAW_SET = frozenset({
-    "2026-09-17_metricool_posts.json",
-    "2026-09-17_supermetrics_videos.json",
     "2026-09-17T095902Z_metricool_posts_r2.json",
     "2026-09-17T095902Z_supermetrics_videos_r2.json",
     "2026-09-17T100216Z_metricool_posts_r3.json",
     "2026-09-17T100216Z_supermetrics_videos_r3a_REPLAY.json",
     "2026-09-17T100244Z_supermetrics_videos_r3b.json",
+    "2026-09-17_metricool_posts.json",
+    "2026-09-17_supermetrics_videos.json",
     "2026-10-08T210821Z_metricool_posts_r4.json",
     "2026-10-08T210821Z_metricool_traffic_r4.json",
     "2026-10-08T213639Z_metricool_besttime_r4.json",
     "2026-10-08T213639Z_metricool_brand_r4.json",
+    "2026-10-12T100030Z_metricool_posts_r5.json",
 })
 
 N_VIDEOS = 17
 
 # Хеши вышестоящих слоёв (insights.run.input_hashes)
 UPSTREAM = {
-    "analytics": "88800c0b779aef6ccfbc3398752be30760d54d81bdb8bc9876648ee5ad4c0846",
-    "features": "631999988be9d2302c5e098217627f8616c144598b55f674f5027ff1725780b3",
-    "reconciliation": "fd98b3114568b023f83c132ed9d544b1b02f69d7c575dbce0d78bdbf3303b645",
+    "analytics": "d67b45fc2412f80c0d64b0cc5528c807efeb14e05313517063a3894b87471047",
+    "features": "60078e88219a2c0870f095630d31b55199bd2fb27ea30eb68e9b56939269016d",
+    "reconciliation": "9663765cefed6b2b55dbe606ef1a344f2efd002237be6a9d226036f8b7f72ee6",
 }
 
-INSIGHTS_HASH = "35e4320dc54ed67f13844be5672ae849340e6ad2ee49edc7e128073a5c2867a8"
+INSIGHTS_HASH = "d5d2556e8a49eddbd79d0e134767bd330279543de67410068d758589caf0e50e"
 N_INSIGHTS, N_BLOCKED = 14, 31
 
 # Признаки feature-policy-1.0.0: 45 имён на ролик
@@ -76,6 +77,9 @@ HISTORY = [
      "why": "два файла-не-наблюдения (usable_as_observation=false): normalize их "
             "не читает, поэтому ни один хеш не сдвинулся — провалилась только "
             "проверка состава сырья, как и должна."},
+    {"raw": "2026-10-12T100030Z_metricool_posts_r5.json",
+     "why": "R5, 2026-10-12: повторная выгрузка Metricool за год, те же 17 роликов; просмотры выросли у 13 (больше всех: 7643545925926915360 +307, 7638406599832341793 +88, 7683970036201049376 +23), лайки у 2, репосты у 1; новых роликов нет; Supermetrics по-прежнему недоступен — наблюдения untested_overlap. Еженедельная Routine не выполнила обновление (нет коннектора Metricool) — выгрузка сделана в рабочей сессии.",
+     "previous": {"n_videos": 17, "upstream": {"analytics": "88800c0b779aef6ccfbc3398752be30760d54d81bdb8bc9876648ee5ad4c0846", "features": "631999988be9d2302c5e098217627f8616c144598b55f674f5027ff1725780b3", "reconciliation": "fd98b3114568b023f83c132ed9d544b1b02f69d7c575dbce0d78bdbf3303b645"}, "insights_hash": "35e4320dc54ed67f13844be5672ae849340e6ad2ee49edc7e128073a5c2867a8", "insights": [14, 31], "feature_rows": 765, "tiers": [510, 255], "feature_statuses": {"derived": 193, "insufficient_baseline": 51, "observed": 347, "unavailable": 174}}},
 ]
 
 
