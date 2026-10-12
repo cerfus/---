@@ -1,0 +1,29 @@
+{
+ "_meta": {
+  "schema": "raw/v1",
+  "round": "R4",
+  "fetched_at": "2026-10-08T21:36:39Z",
+  "run_id": "r4-metricool-brand",
+  "source": "metricool",
+  "tool": "getBrandSettings",
+  "usable_as_observation": false,
+  "purpose": "часовой пояс бренда для показа времени",
+  "minimized": "сохранены только поля id, label, timezone, joinDate, firstConnectionDate; email владельца и подписанная ссылка на аватар не сохраняются",
+  "request": {}
+ },
+ "data": [
+  {
+   "id": 7004662,
+   "label": "gulyashik52",
+   "timezone": "Europe/Moscow",
+   "joinDate": {
+    "dateTime": "2026-09-17T08:30:50",
+    "timezone": "Europe/Madrid"
+   },
+   "firstConnectionDate": {
+    "dateTime": "2026-09-17T08:54:38",
+    "timezone": "Europe/Madrid"
+   }
+  }
+ ]
+}

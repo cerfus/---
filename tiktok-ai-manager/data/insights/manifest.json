@@ -1,0 +1,14 @@
+{
+  "input_hashes": {
+    "analytics": "d67b45fc2412f80c0d64b0cc5528c807efeb14e05313517063a3894b87471047",
+    "features": "60078e88219a2c0870f095630d31b55199bd2fb27ea30eb68e9b56939269016d",
+    "reconciliation": "9663765cefed6b2b55dbe606ef1a344f2efd002237be6a9d226036f8b7f72ee6"
+  },
+  "insights_hash": "d5d2556e8a49eddbd79d0e134767bd330279543de67410068d758589caf0e50e",
+  "insights_run_id": "e80cf64e-090f-56d7-a262-9b2385a13e97",
+  "n_blocked": 31,
+  "n_insights": 14,
+  "period": "2026-10-12",
+  "policy_version": "insights-policy-1.0.0",
+  "report_path": "reports/daily/2026-10-12.md"
+}

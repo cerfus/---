@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "schema": "raw/v1", "round": "R3a", "run_id": "exp004-r3a",
+    "fetched_at": "2026-09-17T10:02:16Z",
+    "source": "supermetrics", "tool": "data_query",
+    "request": {"ds_id": "TIKBA", "settings": {"report_type": "videos"},
+      "fields": "IDENTICAL TO R2", "max_rows": 200},
+    "schedule_id": "ca566134406ce38a0e79bf4423fd16945054c590e85ac1773fc27ca40400f75e",
+    "schedule_id_same_as": "R2",
+    "cache_used": null, "cache_time": null,
+    "source_note": "These rows are a stored copy of an identical query run earlier, not a fresh read. They may be up to an hour old.",
+    "usable_as_observation": false,
+    "exclusion_reason": "Повтор идентичного запроса вернул сохранённую копию R2 (тот же schedule_id). Значения совпадают с R2 побайтово. Учёт этого ответа как наблюдения создал бы ложный вывод об отсутствии изменений за 3 минуты.",
+    "row_count": 16
+  },
+  "rows": "IDENTICAL TO R2 — не дублируется; см. 2026-09-17T095902Z_supermetrics_videos_r2.json"
+}

@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "schema": "raw/v1", "round": "R3", "run_id": "exp004-r3",
+    "fetched_at": "2026-09-17T10:02:16Z",
+    "source": "metricool", "tool": "getAnalyticsDataByMetrics",
+    "request": {"brandId": 7004662, "from": "2026-04-01T00:00:00+03:00", "to": "2026-09-17T23:59:59+03:00",
+      "metrics": ["TKPO02","TKPO03","TKPO06","TKPO07","TKPO08","TKPO09","TKPO10","TKPO11"]},
+    "cache_note": "Metricool не сообщает признака кэша и не отдаёт метки актуальности. Свежесть ответа НЕИЗВЕСТНА.",
+    "usable_as_observation": true, "row_count": 16
+  },
+  "header": ["published","url","duration_sec","views","likes","comments","shares","reach"],
+  "rows": [
+    ["20260910180812","https://www.tiktok.com/@gulyashik52/video/7683970036201049376","35","851","29","2","5",null],
+    ["20260910055224","https://www.tiktok.com/@gulyashik52/video/7683780392029015328","14","2734","365","2","5",null],
+    ["20260906024950","https://www.tiktok.com/@gulyashik52/video/7682248932327476513","10","504","21","0","0",null],
+    ["20260905091059","https://www.tiktok.com/@gulyashik52/video/7681976167829654816","9","400","26","0","1",null],
+    ["20260905003118","https://www.tiktok.com/@gulyashik52/video/7681842224602123553","16","382","18","1","1",null],
+    ["20260819095158","https://www.tiktok.com/@gulyashik52/video/7675678282561375520","10","1127","133","4","13",null],
+    ["20260802095103","https://www.tiktok.com/@gulyashik52/video/7669369589641366817","80","1434","64","5","14",null],
+    ["20260703085729","https://www.tiktok.com/@gulyashik52/video/7658223227226950944","10","1059","45","1","4",null],
+    ["20260619123525","https://www.tiktok.com/@gulyashik52/video/7653084183916547360","7","1210","42","1","0",null],
+    ["20260616003627","https://www.tiktok.com/@gulyashik52/video/7651785569323863329","10","4640","1066","3","198",null],
+    ["20260613210057","https://www.tiktok.com/@gulyashik52/video/7650987964817788192","11","1434","57","1","8",null],
+    ["20260524194202","https://www.tiktok.com/@gulyashik52/video/7643545925926915360","7","168510","7448","27","2650",null],
+    ["20260510231915","https://www.tiktok.com/@gulyashik52/video/7638406599832341793","10","698889","30295","45","7476",null],
+    ["20260508123002","https://www.tiktok.com/@gulyashik52/video/7637497223835667744","11","1229","41","0","7",null],
+    ["20260505233223","https://www.tiktok.com/@gulyashik52/video/7636554591160519969","7","1587","36","1","7",null],
+    ["20260413165741","https://www.tiktok.com/@gulyashik52/video/7628289075081956640","7","819","48","2","3",null]
+  ]
+}
