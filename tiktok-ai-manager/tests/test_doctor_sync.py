@@ -2,6 +2,7 @@
 """Готовность программы и обновление базы на ПК."""
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -93,6 +94,75 @@ def main():
     req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     check("C4 requirements.txt называет драйвер базы и часовые пояса",
           "psycopg" in req and "tzdata" in req)
+
+    print("\n=== D. удобство: свежесть данных, новая версия, установка ===")
+    from datetime import date
+    check("D1 данные моложе недели — OK, с датой и возрастом",
+          D.freshness("2026-10-08T21:08:21+00:00", date(2026, 10, 12))
+          == (D.OK, "данные от 2026-10-08 (4 дн. назад)", ""))
+    st, what, fix = D.freshness("2026-10-08T21:08:21+00:00", date(2026, 10, 20))
+    check("D2 данные старше 8 дней — предупреждение и что сделать с Routine",
+          st == D.WARN and "12 дн." in what and "Metricool" in fix and "пункт 10" in fix)
+    res_old = D.checks(today=date(2027, 1, 1))
+    check("D3 в общей проверке устаревшие данные видны как предупреждение",
+          any(r[0] == D.WARN and "не приходит" in r[1] for r in res_old))
+    check("D4 видео ждут, инструментов нет — предупреждение с командой установки",
+          D.video_check(2, False)[0] == D.WARN
+          and "requirements-extract" in D.video_check(2, False)[2]
+          and D.video_check(0, False)[0] == D.INFO and D.video_check(0, True)[0] == D.OK)
+
+    base = Path(tempfile.mkdtemp())
+    env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+
+    def g(cwd, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                       cwd=str(cwd), check=True, capture_output=True, env=env)
+    g(base, "init", "-q", "--bare", "-b", "main", "origin.git")
+    g(base, "clone", "-q", "origin.git", "a")
+    (base / "a" / "f.txt").write_text("1\n", encoding="utf-8")
+    g(base / "a", "add", "-A")
+    g(base / "a", "commit", "-q", "-m", "1")
+    g(base / "a", "push", "-q", "-u", "origin", "main")
+    g(base, "clone", "-q", "origin.git", "pc")
+    n0 = D.updates_available(base / "pc")
+    (base / "a" / "f.txt").write_text("2\n", encoding="utf-8")
+    g(base / "a", "commit", "-q", "-am", "2")
+    g(base / "a", "push", "-q")
+    n1 = D.updates_available(base / "pc")
+    check("D5 новая версия в GitHub считается: 0, затем 1 новый коммит", (n0, n1) == (0, 1),
+          str((n0, n1)))
+    g(base / "pc", "switch", "-q", "-c", "no-upstream")
+    check("D6 нет upstream — «проверить нельзя», а не ошибка",
+          D.updates_available(base / "pc") is None)
+    check("D7 тесты не ходят в сеть: общая проверка по умолчанию без fetch",
+          not any("новая версия" in r[1] or "версия программы" in r[1] for r in D.checks()))
+
+    saved = {k: os.environ.get(k) for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID")}
+    os.environ["TELEGRAM_BOT_TOKEN"] = "123456:SECRET-TOKEN-VALUE"
+    os.environ["TELEGRAM_OWNER_ID"] = "42"
+    try:
+        out = D.render(D.checks())
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("D8 Telegram настроен — сказано, а токен не напечатан",
+          "Telegram-бот настроен" in out and "SECRET-TOKEN" not in out)
+
+    import runpy
+    ns = runpy.run_path(str(ROOT / "scripts" / "menu.py"))
+    calls = []
+    ran = ns["offer_install"](lambda _p: "нет", missing=["tzdata"], sub=lambda *a: calls.append(a))
+    check("D9 без согласия пакеты не ставятся", ran is False and calls == [])
+    ran = ns["offer_install"](lambda _p: "y", missing=["tzdata"], sub=lambda *a: calls.append(a))
+    check("D10 с согласием — ровно python -m pip install -r requirements.txt",
+          ran is True and calls == [tuple(D.INSTALL_ARGS)]
+          and D.INSTALL_ARGS == ["-m", "pip", "install", "-r", "requirements.txt"])
+    ran = ns["offer_install"](lambda _p: "y", missing=[], sub=lambda *a: calls.append(a))
+    check("D11 всё на месте — ничего не спрашивается и не ставится", ran is False
+          and len(calls) == 1)
 
     failed = [n for n, ok in RESULTS if not ok]
     print(f"\nпроверок: {len(RESULTS)} | провалов: {len(failed)}")

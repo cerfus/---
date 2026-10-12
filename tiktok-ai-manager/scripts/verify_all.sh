@@ -2,6 +2,8 @@
 # Полная проверка: пересборка с нуля, сверка и все тесты.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# меню в тестах не спрашивает GitHub о новой версии: проверка не зависит от сети
+export TIKTOK_NO_FETCH=1
 bash scripts/ensure_pg.sh >/dev/null
 
 echo "=== 1. нормализация raw -> JSONL (детерминизм) ==="

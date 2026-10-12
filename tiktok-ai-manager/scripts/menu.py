@@ -7,6 +7,7 @@
 
 Ввод закончился (Ctrl+Z, закрытый поток) — меню выходит, а не крутится.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -160,6 +161,7 @@ def sync(ask):
 
 def doctor(ask):
     _sub("scripts/doctor.py")
+    offer_install(ask)
 
 
 def ingest(ask):
@@ -201,16 +203,44 @@ ITEMS = (
 )
 
 
-def _startup_check():
-    """Короткая проверка готовности при запуске: только то, что мешает."""
+def _doctor():
     import importlib.util
     spec = importlib.util.spec_from_file_location("doctor", ROOT / "scripts" / "doctor.py")
     mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _startup_check():
+    """Короткая проверка готовности при запуске: только то, что мешает.
+    Новую версию в GitHub спрашивает с потолком времени; TIKTOK_NO_FETCH=1
+    отключает этот запрос (тесты, работа без сети)."""
     try:
-        spec.loader.exec_module(mod)
-        return mod.render(mod.checks(), brief=True)
+        mod = _doctor()
+        return mod.render(mod.checks(fetch=not os.environ.get("TIKTOK_NO_FETCH")),
+                          brief=True)
     except Exception as exc:                     # проверка не должна ронять меню
         return f"  (проверка готовности не выполнилась: {type(exc).__name__})"
+
+
+def offer_install(ask, missing=None, sub=None):
+    """Поставить недостающие обязательные пакеты — только с согласия.
+    True — установка запускалась."""
+    try:
+        mod = _doctor()
+        missing = mod.missing_required() if missing is None else missing
+        args = mod.INSTALL_ARGS
+    except Exception:
+        return False
+    if not missing:
+        return False
+    print(f"\n  Не хватает пакетов: {', '.join(missing)}. Их можно поставить сейчас "
+          f"командой python {' '.join(args)}")
+    if not confirmed(ask("  Установить? да / y: ")):
+        print("  не установлено — команда выше, когда будет удобно")
+        return False
+    (sub or _sub)(*args)
+    return True
 
 
 def _startup_today():
@@ -239,6 +269,8 @@ def main(ask=input):
 
     actions = {k: fn for k, _, fn in ITEMS}
     print("\n" + _startup_check())
+    if offer_install(safe_ask):
+        print("\n" + _startup_check())
     print("\n" + _startup_today())
     while True:
         draw()

@@ -11,7 +11,10 @@
 """
 import json
 import os
+import shutil
+import subprocess
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +22,13 @@ sys.path.insert(0, str(ROOT))
 
 OK, WARN, FAIL, INFO = "OK", "!!", "XX", "--"
 CONNECT_TIMEOUT_SEC = 3
+FETCH_TIMEOUT_SEC = 8
+STALE_DAYS = 8          # еженедельное обновление плюс сутки запаса
+INSTALL_ARGS = ["-m", "pip", "install", "-r", "requirements.txt"]
+VIDEO_MODULES = ("cv2", "numpy", "imageio_ffmpeg")
+ROUTINE_HINT = ("к Routine «TikTok: еженедельное обновление данных» должен быть "
+                "подключён Metricool: claude.ai → Routines → эта Routine → коннекторы; "
+                "затем меню, пункт 10")
 
 
 def _jsonl(path):
@@ -31,8 +41,78 @@ def db_lags(db_videos, db_last, repo_videos, repo_last):
     return db_videos < repo_videos or (db_last or "")[:10] < (repo_last or "")[:10]
 
 
-def checks():
-    """[(состояние, что проверено, что сделать)]. Ничего не печатает."""
+def data_age_days(last_observed, today=None):
+    """Сколько дней назад последний замер в данных проекта."""
+    today = today or datetime.now(timezone.utc).date()
+    return (today - date.fromisoformat(last_observed[:10])).days
+
+
+def freshness(last_observed, today=None):
+    """(состояние, что, что сделать) по возрасту данных."""
+    age = data_age_days(last_observed, today)
+    what = f"данные от {last_observed[:10]} ({age} дн. назад)"
+    if age > STALE_DAYS:
+        return WARN, what + " — еженедельное обновление не приходит", ROUTINE_HINT
+    return OK, what, ""
+
+
+def missing_required():
+    """Обязательные пакеты, которых нет. Ставятся одной командой INSTALL_ARGS."""
+    out = []
+    try:
+        import psycopg                                     # noqa: F401
+    except ImportError:
+        out.append("psycopg")
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Moscow")
+    except Exception:
+        out.append("tzdata")
+    return out
+
+
+def video_check(files_waiting, tools_ok):
+    """Разбор видео нужен, только если видео ждут в data/assets/incoming."""
+    if tools_ok:
+        return OK, "инструменты разбора видео (OpenCV, ffmpeg)", ""
+    if files_waiting:
+        return (WARN, f"в data\\assets\\incoming ждут видео ({files_waiting}), а "
+                      "инструментов разбора нет — признаки кадров не посчитаются",
+                "python -m pip install -r requirements-extract.txt")
+    return INFO, "разбор видео не установлен — нужен, только если класть видеофайлы", ""
+
+
+def _video_tools_ok():
+    import importlib.util
+    return all(importlib.util.find_spec(m) is not None for m in VIDEO_MODULES)
+
+
+def updates_available(root=ROOT, timeout=FETCH_TIMEOUT_SEC):
+    """Сколько коммитов в GitHub новее локальной версии; None — проверить
+    нельзя (нет git, нет связи, не выполнен вход, нет upstream). Без
+    интерактивных вопросов и с потолком времени: запуск меню не ждёт сеть."""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=str(root), env=env, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout)
+    try:
+        up = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        if up.returncode != 0 or "/" not in up.stdout:
+            return None
+        remote, branch = up.stdout.strip().split("/", 1)
+        if git("fetch", "--quiet", remote, branch).returncode != 0:
+            return None
+        c = git("rev-list", "--count", "HEAD..@{u}")
+        return int(c.stdout.strip()) if c.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
+def checks(fetch=False, today=None):
+    """[(состояние, что проверено, что сделать)]. Ничего не печатает.
+    fetch — спросить GitHub о новой версии (сеть; меню и CLI — да, тесты — нет)."""
     out = []
     add = lambda st, what, fix="": out.append((st, what, fix))
 
@@ -47,6 +127,10 @@ def checks():
         return out
     repo_videos = len(_jsonl(videos))
     add(OK, f"данные проекта: роликов {repo_videos}")
+    snap_files = sorted((ROOT / "data" / "snapshots").glob("*.jsonl"))
+    repo_last = max((s["observed_at"] for f in snap_files for s in _jsonl(f)), default=None)
+    if repo_last:
+        add(*freshness(repo_last, today))
 
     try:
         from zoneinfo import ZoneInfo
@@ -84,9 +168,6 @@ def checks():
                 cur.execute("SELECT max(observed_at) FROM video_snapshots")
                 db_last = cur.fetchone()[0]
             add(OK, f"база отвечает: роликов {db_videos}")
-            repo_last = max(s["observed_at"] for f in sorted((ROOT / "data" / "snapshots")
-                                                             .glob("*.jsonl"))
-                            for s in _jsonl(f))
             db_last_s = db_last.isoformat() if db_last else ""
             if db_lags(db_videos, db_last_s, repo_videos, repo_last):
                 add(WARN, f"база отстаёт от данных проекта: в базе {db_videos} роликов "
@@ -101,11 +182,35 @@ def checks():
                       "недоступны, остальное работает",
                 "проверьте, что служба PostgreSQL запущена и пароли в .env верны")
 
-    import shutil
     add(OK if shutil.which("git") else INFO,
         "git — для пункта «Обновить программу из GitHub»" if shutil.which("git")
         else "git не найден — обновлять придётся вручную",
         "" if shutil.which("git") else "по желанию: Git for Windows, git-scm.com")
+
+    if fetch and shutil.which("git"):
+        n = updates_available()
+        if n is None:
+            add(INFO, "новая версия не проверена: нет связи с GitHub или вход не выполнен")
+        elif n:
+            add(WARN, f"в GitHub есть новая версия: новых коммитов {n}",
+                "меню, пункт 10 «Обновить программу из GitHub»")
+        else:
+            add(OK, "версия программы — последняя из GitHub")
+
+    incoming = ROOT / "data" / "assets" / "incoming"
+    waiting = len([f for f in incoming.iterdir() if f.name != ".gitkeep"]) \
+        if incoming.exists() else 0
+    add(*video_check(waiting, _video_tools_ok()))
+
+    try:
+        from core import config
+        config.load_dotenv()
+    except Exception:
+        pass
+    tg = bool(os.environ.get("TELEGRAM_BOT_TOKEN")) and bool(os.environ.get("TELEGRAM_OWNER_ID"))
+    add(OK if tg else INFO, "Telegram-бот " + ("настроен (запуск: python -m mobile.telegram)"
+                                               if tg else "не настроен"),
+        "" if tg else "по желанию: TELEGRAM_BOT_TOKEN и TELEGRAM_OWNER_ID в .env")
 
     try:
         import anthropic                                   # noqa: F401
@@ -139,7 +244,7 @@ def render(results, brief=False):
 
 
 def main():
-    res = checks()
+    res = checks(fetch=True)
     print(render(res))
     return 1 if any(r[0] == FAIL for r in res) else 0
 

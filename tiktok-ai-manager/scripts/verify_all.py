@@ -67,6 +67,9 @@ def child_env():
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    # тесты запускают меню; его стартовая проверка новой версии ходит в
+    # GitHub — проверка проекта не должна зависеть от сети
+    env["TIKTOK_NO_FETCH"] = "1"
     return env
 
 
